@@ -2,7 +2,9 @@ const app = document.getElementById("app");
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DEFAULT_PREFS = { from: 9 * 60, to: 18 * 60, min: 30 };
+// Rooms can't be booked before 10:00.
+const BOOKING_OPENS = 10 * 60;
+const DEFAULT_PREFS = { from: BOOKING_OPENS, to: 18 * 60, min: 30 };
 const NO_ROOM = "Room not listed";
 // Where "Book" sends people: Resource Booker's room search for a day and
 // time range. You log in there yourself; this app never does.
@@ -95,6 +97,16 @@ function uncovered(events, from, to, min) {
 
 // A single booking can be at most this long, so longer gaps need several.
 const MAX_BOOKING = 3 * 60;
+
+/** A gap fits in one booking, or else offer its first or last MAX_BOOKING. */
+function bookingOptions(s, e) {
+  return e - s <= MAX_BOOKING
+    ? [[s, e]]
+    : [
+        [s, s + MAX_BOOKING],
+        [e - MAX_BOOKING, e],
+      ];
+}
 
 /** Bookings for a day grouped by room, in order of first booking. */
 function roomsFor(members, day) {
@@ -524,6 +536,7 @@ function startGroup(id) {
     editing: false,
   };
 
+  state.prefs.from = Math.max(state.prefs.from, BOOKING_OPENS);
   const self = () => state.group?.members.find((m) => m.id === state.me);
 
   function loadWeek(start) {
@@ -682,7 +695,7 @@ function startGroup(id) {
       h(
         "div",
         { class: "selects" },
-        select("From", "from", hours(6, 13), time),
+        select("From", "from", hours(BOOKING_OPENS / 60, 13), time),
         select("Until", "to", hours(14, 23), time),
         select("Shortest gap", "min", [15, 30, 45, 60, 90, 120], (m) => `${duration(m)} or longer`, true),
       ),
@@ -958,6 +971,7 @@ function startGroup(id) {
             "ul",
             { class: "slots" },
             open.map(([s, e]) => {
+              const options = bookingOptions(s, e);
               return h(
                 "li",
                 { class: "slot" },
@@ -970,8 +984,15 @@ function startGroup(id) {
                     { class: "slot-meta tabular" },
                     e - s > MAX_BOOKING ? `${duration(e - s)} · ${Math.ceil((e - s) / MAX_BOOKING)} bookings` : duration(e - s),
                   ),
-                  canBook && bookButton(s, e),
+                  canBook && options.length === 1 && bookButton(s, e),
                 ),
+                canBook &&
+                  options.length > 1 &&
+                  h(
+                    "span",
+                    { class: "slot-options" },
+                    options.map(([a, b]) => bookButton(a, b, `Book ${time(a)}–${time(b)}`)),
+                  ),
               );
             }),
           )
@@ -1125,7 +1146,7 @@ function startGroup(id) {
       h(
         "div",
         { class: "tl-gap", style: `top:${y(s)}px;height:${y(e) - y(s)}px` },
-        canBook && y(e) - y(s) >= 30 && bookButton(s, e, `Book ${time(s)}–${time(e)}`),
+        canBook && y(e) - y(s) >= 30 && bookingOptions(s, e).map(([a, b]) => bookButton(a, b, `Book ${time(a)}–${time(b)}`)),
       ),
     );
 
