@@ -199,17 +199,39 @@ function openSheet(title, ...content) {
 
 let fieldCount = 0;
 
-/* ---------- Shared form ---------- */
+/* ---------- Shared form parts ---------- */
 
-function memberForm({ submitLabel, onSubmit }) {
-  const name = h("input", {
+/** Remember who you are in a group on this device, and list it on the home page. */
+function remember(code, memberId, name) {
+  saved.set(`me:${code}`, memberId);
+  saved.set("name", name.trim());
+  const groups = saved.get("groups", []).filter((g) => g.code !== code);
+  saved.set("groups", [{ code, name: name.trim() }, ...groups].slice(0, 5));
+}
+
+function forget(code) {
+  saved.set(`me:${code}`, null);
+  saved.set(
+    "groups",
+    saved.get("groups", []).filter((g) => g.code !== code),
+  );
+}
+
+function nameInput() {
+  const input = h("input", {
     name: "name",
     autocomplete: "given-name",
     autocapitalize: "words",
     maxlength: 24,
     enterkeyhint: "next",
   });
-  const url = h("input", {
+  input.value = saved.get("name", "");
+  input.id = `field-${++fieldCount}`;
+  return input;
+}
+
+function linkInput() {
+  const input = h("input", {
     name: "url",
     type: "text",
     inputmode: "url",
@@ -220,11 +242,12 @@ function memberForm({ submitLabel, onSubmit }) {
     placeholder: "https://…/timetable.ics",
     enterkeyhint: "go",
   });
+  input.id = `field-${++fieldCount}`;
 
-  const urlWrap = h("div", { class: "input-wrap" }, url);
+  const wrap = h("div", { class: "input-wrap" }, input);
   if (navigator.clipboard?.readText) {
-    url.classList.add("has-action");
-    urlWrap.append(
+    input.classList.add("has-action");
+    wrap.append(
       h(
         "button",
         {
@@ -232,9 +255,9 @@ function memberForm({ submitLabel, onSubmit }) {
           type: "button",
           onclick: async () => {
             try {
-              url.value = (await navigator.clipboard.readText()).trim();
+              input.value = (await navigator.clipboard.readText()).trim();
             } catch {
-              url.focus();
+              input.focus();
             }
           },
         },
@@ -257,13 +280,14 @@ function memberForm({ submitLabel, onSubmit }) {
     h("p", {}, "Rooms you book through the university show up in it automatically. Friends only see your bookings, not your classes."),
   );
 
+  return { input, field: h("div", { class: "field" }, h("label", { for: input.id }, "Timetable link"), wrap, help) };
+}
+
+/** Wire up a form whose submit button shows progress and whose errors appear above it. */
+function form({ submitLabel, busyLabel, onSubmit }, ...fields) {
   const error = h("p", { class: "error", role: "alert" });
   const submit = h("button", { class: "button primary", type: "submit" }, submitLabel);
-
-  name.id = `field-${++fieldCount}`;
-  url.id = `field-${++fieldCount}`;
-
-  return h(
+  const el = h(
     "form",
     {
       class: "form",
@@ -271,36 +295,155 @@ function memberForm({ submitLabel, onSubmit }) {
       onsubmit: async (e) => {
         e.preventDefault();
         error.textContent = "";
-        if (!name.value.trim()) {
-          error.textContent = "Add your name.";
-          return name.focus();
-        }
-        if (!url.value.trim()) {
-          error.textContent = "Paste your timetable link.";
-          return url.focus();
-        }
         submit.disabled = true;
-        submit.textContent = "Checking your timetable…";
+        submit.textContent = busyLabel;
         try {
-          await onSubmit({ name: name.value, url: url.value });
+          await onSubmit();
         } catch (err) {
           error.textContent = err.message;
-          submit.disabled = false;
-          submit.textContent = submitLabel;
         }
+        submit.disabled = false;
+        submit.textContent = el.dataset.label || submitLabel;
       },
     },
-    h("div", { class: "field" }, h("label", { for: name.id }, "Your name"), name),
-    h("div", { class: "field" }, h("label", { for: url.id }, "Timetable link"), urlWrap, help),
+    ...fields,
     error,
     submit,
   );
+  el.setLabel = (label) => {
+    el.dataset.label = label;
+    submit.textContent = label;
+  };
+  return el;
+}
+
+/** Throw a friendly error if an input is empty, focusing it first. */
+function required(input, message) {
+  if (input.value.trim()) return input.value;
+  input.focus();
+  throw new Error(message);
+}
+
+/** Name and timetable link, for creating a group or joining one from its page. */
+function memberForm({ submitLabel, onSubmit }) {
+  const name = nameInput();
+  const link = linkInput();
+  return form(
+    {
+      submitLabel,
+      busyLabel: "Checking your timetable…",
+      onSubmit: () =>
+        onSubmit({ name: required(name, "Add your name."), url: required(link.input, "Paste your timetable link.") }),
+    },
+    h("div", { class: "field" }, h("label", { for: name.id }, "Your name"), name),
+    link.field,
+  );
+}
+
+/**
+ * Name and group code. A name already in the group signs you in as them;
+ * a new name asks for a timetable link and joins.
+ */
+function joinForm() {
+  const name = nameInput();
+  const code = h("input", {
+    name: "code",
+    class: "code-input",
+    autocomplete: "off",
+    autocapitalize: "characters",
+    autocorrect: "off",
+    spellcheck: "false",
+    maxlength: 6,
+    placeholder: "K7M2QX",
+    enterkeyhint: "go",
+  });
+  code.id = `field-${++fieldCount}`;
+  const link = linkInput();
+  const newcomer = h(
+    "div",
+    { class: "form", hidden: true },
+    h("p", { class: "field-note" }, "You're new to this group. Add your timetable link to join."),
+    link.field,
+  );
+  let group = null;
+
+  const el = form(
+    {
+      submitLabel: "Join",
+      busyLabel: "Joining…",
+      onSubmit: async () => {
+        const who = required(name, "Add your name.").trim();
+        const value = required(code, "Enter your group code.").trim().toUpperCase();
+        if (group?.id !== value) {
+          group = await api(`/groups/${encodeURIComponent(value)}`);
+          newcomer.hidden = true;
+          el.setLabel("Join");
+        }
+
+        const match = group.members.find((m) => m.name.toLowerCase() === who.toLowerCase());
+        if (match) {
+          remember(group.id, match.id, match.name);
+          return location.assign(`/g/${group.id}`);
+        }
+        if (newcomer.hidden) {
+          newcomer.hidden = false;
+          el.setLabel("Join group");
+          link.input.focus();
+          return;
+        }
+        const body = { name: who, url: required(link.input, "Paste your timetable link.") };
+        const { me } = await api(`/groups/${group.id}/members`, { method: "POST", body });
+        remember(group.id, me, who);
+        location.assign(`/g/${group.id}`);
+      },
+    },
+    h("div", { class: "field" }, h("label", { for: name.id }, "Your name"), name),
+    h("div", { class: "field" }, h("label", { for: code.id }, "Group code"), code),
+    newcomer,
+  );
+  code.addEventListener("input", () => {
+    code.value = code.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  });
+  return el;
 }
 
 /* ---------- Home ---------- */
 
 function renderHome() {
   document.title = "Bookings";
+  let mode = "join";
+  const panel = h("div");
+  const tabs = h("div", { class: "segmented", role: "group", "aria-label": "Join or create" });
+
+  function show() {
+    tabs.replaceChildren(
+      ...[
+        ["join", "Join a group"],
+        ["create", "Create a group"],
+      ].map(([value, label]) =>
+        h(
+          "button",
+          { type: "button", "aria-pressed": String(mode === value), onclick: () => ((mode = value), show()) },
+          label,
+        ),
+      ),
+    );
+    panel.replaceChildren(
+      mode === "join"
+        ? joinForm()
+        : memberForm({
+            submitLabel: "Create group",
+            onSubmit: async (body) => {
+              const { group, me } = await api("/groups", { method: "POST", body });
+              remember(group.id, me, body.name);
+              location.assign(`/g/${group.id}`);
+            },
+          }),
+    );
+  }
+  show();
+
+  const groups = saved.get("groups", []);
   app.replaceChildren(
     h(
       "main",
@@ -310,16 +453,32 @@ function renderHome() {
       h(
         "p",
         { class: "lede" },
-        "Add your University of Manchester timetable, send the link to your friends, and see every room you've booked, for how long, and the gaps still to book.",
+        "Share your University of Manchester room bookings with your group: who booked what, for how long, and the gaps still to book.",
       ),
-      memberForm({
-        submitLabel: "Create group",
-        onSubmit: async (body) => {
-          const { group, me } = await api("/groups", { method: "POST", body });
-          saved.set(`me:${group.id}`, me);
-          location.assign(`/g/${group.id}`);
-        },
-      }),
+      groups.length > 0 &&
+        h(
+          "section",
+          { class: "block" },
+          h("div", { class: "section-head" }, h("h2", {}, "Your groups")),
+          h(
+            "ul",
+            { class: "slots" },
+            groups.map((g) =>
+              h(
+                "li",
+                {},
+                h(
+                  "a",
+                  { class: "slot group-link", href: `/g/${g.code}` },
+                  h("span", { class: "slot-time tabular" }, g.code),
+                  h("span", { class: "slot-meta" }, `as ${g.name}`),
+                ),
+              ),
+            ),
+          ),
+        ),
+      tabs,
+      panel,
       h("p", { class: "note" }, "Your link stays private. Friends see your room bookings, never your classes or the link itself."),
     ),
   );
@@ -418,17 +577,18 @@ function startGroup(id) {
 
   async function share() {
     const url = `${location.origin}/g/${id}`;
+    const text = `Join our room bookings with code ${id}`;
     if (navigator.share && matchMedia("(pointer: coarse)").matches) {
       try {
-        await navigator.share({ title: "Bookings", text: "Add your room bookings so we can all see them.", url });
+        await navigator.share({ title: "Bookings", text, url });
       } catch {}
       return;
     }
     try {
-      await navigator.clipboard.writeText(url);
-      toast("Link copied");
+      await navigator.clipboard.writeText(id);
+      toast(`Code ${id} copied`);
     } catch {
-      prompt("Copy this link", url);
+      prompt("Group code", id);
     }
   }
 
@@ -441,7 +601,7 @@ function startGroup(id) {
           const { group, me } = await api(`/groups/${id}/members`, { method: "POST", body });
           state.group = group;
           state.me = me;
-          saved.set(`me:${id}`, me);
+          remember(id, me, body.name);
           sheet.close();
           toast("You're in");
           reloadAll();
@@ -465,7 +625,7 @@ function startGroup(id) {
       state.group = await api(`/groups/${id}/members/${member.id}`, { method: "DELETE" });
       if (member.id === state.me) {
         state.me = null;
-        saved.set(`me:${id}`, null);
+        forget(id);
       }
       if (state.group.members.length === 0) state.editing = false;
       reloadAll();
@@ -542,19 +702,59 @@ function startGroup(id) {
       "header",
       { class: "bar" },
       h("a", { class: "wordmark", href: "/" }, "Bookings"),
-      h("button", { class: "button", type: "button", onclick: share }, "Share link"),
+      h(
+        "button",
+        { class: "button code-button", type: "button", onclick: share, "aria-label": `Group code ${id}. Share` },
+        h("span", { class: "code-label" }, "Code"),
+        h("span", { class: "tabular" }, id),
+      ),
     );
+  }
+
+  function signIn(member) {
+    state.me = member.id;
+    remember(id, member.id, member.name);
+    render();
+  }
+
+  function signOut() {
+    state.me = null;
+    saved.set(`me:${id}`, null);
+    render();
   }
 
   function callout() {
     if (self()) return null;
-    const names = state.group.members.map((m) => m.name);
-    const who = names.length > 2 ? `${names.slice(0, 2).join(", ")} and ${names.length - 2} more` : names.join(" and ");
+    const members = state.group.members;
     return h(
       "div",
       { class: "callout" },
-      h("p", {}, names.length ? `Add your timetable to share room bookings with ${who}.` : "Add your timetable to get started."),
-      h("button", { class: "button primary", type: "button", onclick: openAdd }, "Add my timetable"),
+      h("p", {}, members.length ? "Who are you?" : "Add your timetable to get started."),
+      members.length > 0 &&
+        h(
+          "div",
+          { class: "people" },
+          members.map((m) =>
+            h(
+              "button",
+              { class: "chip", type: "button", style: `--c: var(--m${m.colour})`, onclick: () => signIn(m) },
+              h("span", { class: "dot" }),
+              h("span", { class: "chip-name" }, m.name),
+            ),
+          ),
+        ),
+      h("button", { class: "button primary", type: "button", onclick: openAdd }, members.length ? "I'm new here" : "Add my timetable"),
+    );
+  }
+
+  function footer() {
+    const me = self();
+    if (!me) return null;
+    return h(
+      "p",
+      { class: "footer" },
+      `You're ${me.name}. `,
+      h("button", { class: "link", type: "button", onclick: signOut }, "Switch"),
     );
   }
 
@@ -890,6 +1090,7 @@ function startGroup(id) {
         weekNav(),
         dayTabs(data),
         content,
+        footer(),
       ),
     );
   }
@@ -930,6 +1131,7 @@ function startGroup(id) {
 
 /* ---------- Routing ---------- */
 
-const match = location.pathname.match(/^\/g\/([a-z0-9]{10})\/?$/);
-if (match) startGroup(match[1]);
-else renderHome();
+const match = location.pathname.match(/^\/g\/([A-Za-z0-9]{6})\/?$/);
+if (!match) renderHome();
+else if (match[1] !== match[1].toUpperCase()) location.replace(`/g/${match[1].toUpperCase()}`);
+else startGroup(match[1]);

@@ -2,7 +2,7 @@ import { loadFeed, normaliseUrl, forgetFeed, UserError } from "../../lib/feeds.j
 import { isBooking } from "../../lib/bookings.js";
 import { occurrencesBetween } from "../../lib/ics.js";
 import { addDays, isMonday, toDayPieces } from "../../lib/london.js";
-import { createGroup, getGroup, updateGroup, isGroupId, newId, nextColour, MAX_MEMBERS } from "../../lib/store.js";
+import { createGroup, getGroup, updateGroup, normaliseCode, newId, nextColour, MAX_MEMBERS } from "../../lib/store.js";
 
 export const config = { path: "/api/*" };
 
@@ -82,12 +82,12 @@ async function route(req, parts) {
     return json({ group: publicGroup(group), me: member.id }, 201);
   }
 
-  const id = parts[1];
-  if (!isGroupId(id || "")) return fail("Not found", 404);
+  const id = normaliseCode(parts[1]);
+  if (!id) return fail("No group with that code.", 404);
 
   if (parts.length === 2 && method === "GET") {
     const group = await getGroup(id);
-    return group ? json(publicGroup(group)) : fail("Not found", 404);
+    return group ? json(publicGroup(group)) : fail("No group with that code.", 404);
   }
 
   if (parts.length === 3 && parts[2] === "week" && method === "GET") {
@@ -99,11 +99,19 @@ async function route(req, parts) {
   }
 
   if (parts.length === 3 && parts[2] === "members" && method === "POST") {
-    if (!(await getGroup(id))) return fail("Not found", 404);
-    const member = await newMember(await readBody(req));
+    const existing = await getGroup(id);
+    if (!existing) return fail("No group with that code.", 404);
+    const body = await readBody(req);
+    // People sign in by name, so names must be unique within a group.
+    // Checked before the link so the answer is quick.
+    const taken = (name) => (group) => group.members.some((m) => m.name.toLowerCase() === name.toLowerCase());
+    const name = String(body.name || "").replace(/\s+/g, " ").trim();
+    if (name && taken(name)(existing)) throw new UserError(`Someone here is already called ${name}. Add an initial to tell you apart.`);
+    const member = await newMember(body);
     const group = await updateGroup(id, (group) => {
       if (group.members.length >= MAX_MEMBERS) throw new UserError(`A group can have up to ${MAX_MEMBERS} people.`);
       if (group.members.some((m) => m.url === member.url)) throw new UserError("That timetable is already in this group.");
+      if (taken(member.name)(group)) throw new UserError(`Someone here is already called ${member.name}. Add an initial to tell you apart.`);
       group.members.push({ ...member, colour: nextColour(group.members) });
       return group;
     });
@@ -126,7 +134,9 @@ async function route(req, parts) {
 }
 
 export default async (req) => {
-  const parts = new URL(req.url).pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
+  // After a 404 the dev server retries the path with /index.html appended.
+  const path = new URL(req.url).pathname.replace(/\/index\.html?$/, "");
+  const parts = path.replace(/^\/api\/?/, "").split("/").filter(Boolean);
   if (parts[0] !== "groups") return fail("Not found", 404);
   try {
     return await route(req, parts);

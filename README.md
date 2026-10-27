@@ -4,6 +4,8 @@ See which rooms your group has booked at the University of Manchester, for how l
 
 Rooms booked through the university's room booking system appear in your timetable's iCal feed (as `Event type: Booking_Accepted`). Each person adds their timetable link once; the app shows only their bookings, never their classes.
 
+Each group has a 6-character code (like `K7M2QX`). To join, enter your name and the code. If the name is already in the group you're signed in as them, so you can open it on another phone without pasting your link again. A new name is asked for a timetable link. Names are unique within a group.
+
 For each day:
 
 - **Status**: "No room booked yet", the room booked right now and until when, or the next room.
