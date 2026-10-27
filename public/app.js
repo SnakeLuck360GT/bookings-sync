@@ -927,14 +927,23 @@ function startGroup(id) {
       );
     }
     const label = ranged ? `Book ${range}` : "Book";
+    const href = bookingLink(state.day, s, e);
     return h(
       "a",
       {
         class: "button book",
-        href: bookingLink(state.day, s, e),
-        target: "_blank",
-        rel: "noopener",
+        href,
+        rel: "noreferrer",
         "aria-label": `Book a room for ${time(s)} to ${time(e)}`,
+        // Resource Booker can hang when opened in a new tab or in-app browser on phones,
+        // so open it in this tab, and copy the link first so it can be pasted if it still does.
+        onclick: async (event) => {
+          event.preventDefault();
+          try {
+            await navigator.clipboard.writeText(href);
+          } catch {}
+          location.href = href;
+        },
       },
       label,
     );
