@@ -1,4 +1,5 @@
 import { loadFeed, normaliseUrl, forgetFeed, UserError } from "../../lib/feeds.js";
+import { isBooking } from "../../lib/bookings.js";
 import { occurrencesBetween } from "../../lib/ics.js";
 import { addDays, isMonday, toDayPieces } from "../../lib/london.js";
 import { createGroup, getGroup, updateGroup, isGroupId, newId, nextColour, MAX_MEMBERS } from "../../lib/store.js";
@@ -16,11 +17,6 @@ const fail = (message, status = 400) => json({ error: message }, status);
 // Links stay on the server; friends only ever receive names and room bookings.
 const publicMember = ({ id, name, colour }) => ({ id, name, colour });
 const publicGroup = (group) => ({ id: group.id, members: group.members.map(publicMember) });
-
-/** UoM room bookings show up in timetable feeds as "Event type: Booking_Accepted". */
-function isBooking(event) {
-  return /^booking/i.test(event.kind) && !/reject|cancel|declin|withdr/i.test(`${event.kind} ${event.status}`);
-}
 
 function cleanName(input) {
   const name = String(input || "").replace(/\s+/g, " ").trim();
