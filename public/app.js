@@ -1002,54 +1002,135 @@ function startGroup(id) {
             isToday && bookings.length ? "Nothing left to book today." : `Booked from ${time(from)} to ${time(to)}.`,
           ),
       stillToBook(members, bookings),
+      canBook &&
+        open.length > 0 &&
+        h(
+          "p",
+          { class: "hint" },
+          h("button", { class: "link", type: "button", onclick: () => openReminder(open) }, "Remind me to book"),
+        ),
     );
   }
 
-  function roomsSection(rooms, now) {
-    if (!rooms.length) return null;
+  /** A calendar reminder to book a room for the selected day. */
+  function openReminder(open) {
+    const day = state.day;
+    const label = `${DAY_NAMES[weekday(day)]} ${dayOfMonth(day)} ${monthOf(day)}`;
+    // Link to the longest gap, since that's the one most worth booking.
+    const longest = open.reduce((a, b) => (b[1] - b[0] > a[1] - a[0] ? b : a));
+    const link = bookingLink(day, ...bookingOptions(...longest)[0]);
+    const title = `Book a room for ${label}`;
+    const details = `Gaps: ${open.map(([s, e]) => `${time(s)}–${time(e)}`).join(", ")}\nBook: ${link}`;
+
+    // Default: the day before at 9:00, or in 15 minutes if that's already passed.
+    const pad = (n) => String(n).padStart(2, "0");
+    const local = (d) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    let at = new Date(`${addDays(day, -1)}T09:00`);
+    if (at < new Date()) at = new Date(Date.now() + 15 * 60 * 1000);
+    const input = h("input", { type: "datetime-local", value: local(at) });
+    input.id = `field-${++fieldCount}`;
+
+    const utc = (d) =>
+      d
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\.\d{3}/, "");
+    function add() {
+      const start = new Date(input.value);
+      if (Number.isNaN(start.getTime())) return;
+      const end = new Date(start.getTime() + 15 * 60 * 1000);
+      if (/Android/i.test(navigator.userAgent)) {
+        const params = new URLSearchParams({
+          action: "TEMPLATE",
+          text: title,
+          dates: `${utc(start)}/${utc(end)}`,
+          details,
+        });
+        window.open(`https://calendar.google.com/calendar/render?${params}`, "_blank", "noopener");
+      } else {
+        const ics = [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Bookings//EN",
+          "BEGIN:VEVENT",
+          `UID:${utc(start)}-${day}@bookings`,
+          `DTSTAMP:${utc(new Date())}`,
+          `DTSTART:${utc(start)}`,
+          `DTEND:${utc(end)}`,
+          `SUMMARY:${title}`,
+          // iCalendar text escapes commas and newlines.
+          `DESCRIPTION:${details.replace(/,/g, "\\,").replace(/\n/g, "\\n")}`,
+          `URL:${link}`,
+          "BEGIN:VALARM",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${title}`,
+          "TRIGGER:PT0M",
+          "END:VALARM",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n");
+        const a = h("a", { href: URL.createObjectURL(new Blob([ics], { type: "text/calendar" })), download: "book-a-room.ics" });
+        a.click();
+      }
+      sheet.close();
+    }
+
+    const sheet = openSheet(
+      "Remind me to book",
+      h(
+        "div",
+        { class: "form" },
+        h("p", { class: "field-note" }, `A reminder in your calendar to book a room for ${label}, with the Book link in it.`),
+        h("div", { class: "field" }, h("label", { for: input.id }, "Remind me at"), input),
+        h("button", { class: "button primary", type: "button", onclick: add }, "Add reminder"),
+      ),
+    );
+  }
+
+  function roomsSection(bookings, now) {
+    if (!bookings.length) return null;
     return h(
       "section",
       { class: "block" },
-      h("div", { class: "section-head" }, h("h2", {}, rooms.length === 1 ? "Booked room" : "Booked rooms")),
-      rooms.map((room) =>
-        h(
-          "div",
-          { class: "room" },
-          h(
-            "div",
-            { class: "room-head" },
-            h("h3", {}, room.room, room.building && h("span", { class: "room-building" }, room.building)),
-            h("span", { class: "room-total tabular" }, duration(room.total)),
-          ),
-          h(
-            "ul",
-            { class: "bookings" },
-            room.bookings.map(({ member, event }) => {
-              const past = state.day < now.day || (state.day === now.day && event.end <= now.minutes);
-              const current = state.day === now.day && event.start <= now.minutes && now.minutes < event.end;
-              return h(
-                "li",
-                {},
+      h("div", { class: "section-head" }, h("h2", {}, bookings.length === 1 ? "Booked room" : "Booked rooms")),
+      h(
+        "ul",
+        { class: "bookings" },
+        bookings.map(({ member, event }) => {
+          const past = state.day < now.day || (state.day === now.day && event.end <= now.minutes);
+          const current = state.day === now.day && event.start <= now.minutes && now.minutes < event.end;
+          return h(
+            "li",
+            {},
+            h(
+              "button",
+              {
+                class: ["booking", past && "past", current && "now"].filter(Boolean).join(" "),
+                type: "button",
+                onclick: () => openBooking(member, event),
+              },
+              h(
+                "span",
+                { class: "booking-main" },
                 h(
-                  "button",
-                  {
-                    class: ["booking", past && "past", current && "now"].filter(Boolean).join(" "),
-                    type: "button",
-                    onclick: () => openBooking(member, event),
-                  },
-                  h(
-                    "span",
-                    { class: "booking-who", style: `--c: var(--m${member.colour})` },
-                    h("span", { class: "dot" }),
-                    member.name,
-                  ),
-                  h("span", { class: "booking-time tabular" }, `${time(event.start)} – ${time(event.end)}`),
-                  h("span", { class: "booking-len tabular" }, current ? "Now" : duration(event.end - event.start)),
+                  "span",
+                  { class: "booking-who", style: `--c: var(--m${member.colour})` },
+                  h("span", { class: "dot" }),
+                  member.name,
                 ),
-              );
-            }),
-          ),
-        ),
+                h("span", { class: "booking-room" }, event.room || event.location || NO_ROOM),
+              ),
+              h("span", { class: "booking-time tabular" }, `${time(event.start)} – ${time(event.end)}`),
+              h("span", { class: "booking-sub" }, event.building),
+              h(
+                "span",
+                { class: "booking-len tabular" },
+                current ? `Now · ${duration(event.end - now.minutes)} left` : duration(event.end - event.start),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1078,7 +1159,7 @@ function startGroup(id) {
       {},
       status(bookings, now),
       gaps(bookings, now, members),
-      roomsSection(rooms, now),
+      roomsSection(bookings, now),
       failed.length > 0 &&
         h(
           "p",
@@ -1125,7 +1206,8 @@ function startGroup(id) {
             {
               class: "event",
               type: "button",
-              style: `--c: var(--m${member.colour});top:${y(event.start)}px;height:${Math.max(y(event.end) - y(event.start) - 2, 14)}px`,
+              // Longer bookings get bigger room numbers: 14px at 30 min up to 24px at 3 hours.
+              style: `--c: var(--m${member.colour});--room-size:${Math.round(Math.min(24, Math.max(14, 12 + ((event.end - event.start) / 60) * 4)))}px;top:${y(event.start)}px;height:${Math.max(y(event.end) - y(event.start) - 2, 14)}px`,
               "aria-label": `${room.room}: ${member.name}, ${time(event.start)} to ${time(event.end)}`,
               onclick: () => openBooking(member, event),
             },

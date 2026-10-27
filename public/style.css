@@ -521,37 +521,7 @@ button.status:active {
   color: var(--muted);
 }
 
-/* Rooms */
-
-.room + .room {
-  margin-top: 16px;
-}
-
-.room-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0 4px;
-}
-
-.room-head h3 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.room-building {
-  margin-left: 8px;
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.room-total {
-  font-size: 14px;
-  color: var(--muted);
-}
+/* Booked rooms */
 
 .bookings {
   list-style: none;
@@ -561,13 +531,20 @@ button.status:active {
 
 .booking {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 12px;
+  gap: 2px 12px;
   width: 100%;
-  padding: 10px 0;
+  padding: 12px 0;
   text-align: left;
   border-bottom: 1px solid var(--line);
+}
+
+.booking-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
 .booking-who {
@@ -581,15 +558,29 @@ button.status:active {
   text-overflow: ellipsis;
 }
 
+.booking-room {
+  flex: none;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
 .booking-time {
+  font-size: 17px;
   font-weight: 600;
+  text-align: right;
+}
+
+.booking-sub {
+  padding-left: 17px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .booking-len {
-  min-width: 44px;
-  text-align: right;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
+  text-align: right;
 }
 
 .booking.past {
@@ -1069,7 +1060,7 @@ button.status:active {
 }
 
 .event strong {
-  font-size: 15px;
+  font-size: var(--room-size, 15px);
   font-weight: 650;
   letter-spacing: -0.01em;
   line-height: 1.3;

@@ -11,7 +11,8 @@ For each day:
 - **Status**: "No room booked yet", the room booked right now and until when, or the next room.
 - **Gaps to book**: times between 10:00 (when booking opens) and 18:00 that no booking covers, with how many bookings each needs. A Book button opens Resource Booker for that day and time; gaps longer than the 3-hour limit offer two options, the first or last 3 hours.
 - **Booking left**: who hasn't used their one booking for that day.
-- **Booked rooms**: each room with building, who booked it, times and total hours, plus a timeline.
+- **Booked rooms**: each booking in time order, with who booked it next to the room, the building, times and length, plus a timeline where longer bookings get bigger room numbers.
+- **Remind me to book**: adds a reminder to your calendar with the Book link (Google Calendar on Android, a calendar file elsewhere).
 
 Timetable links stay on the server. The browser only receives names and bookings.
 
