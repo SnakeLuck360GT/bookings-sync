@@ -9,7 +9,7 @@ Each group has a 6-character code (like `K7M2QX`). To join, enter your name and 
 For each day:
 
 - **Status**: "No room booked yet", the room booked right now and until when, or the next room.
-- **Gaps to book**: times between 10:00 (when booking opens) and 18:00 that no booking covers, with how many bookings each needs. A Book button opens Resource Booker for that day and time; gaps longer than the 3-hour limit offer two options, the first or last 3 hours.
+- **Gaps to book**: times between 10:00 (when booking opens) and 18:00 that no booking covers. A Book button opens Resource Booker for that day and time; gaps longer than the 3-hour limit offer two options, the first or last 3 hours.
 - **Booking left**: who hasn't used their one booking for that day.
 - **Booked rooms**: each booking in time order, with who booked it next to the room, the building, times and length, plus a timeline where longer bookings get bigger room numbers.
 - **Booking opens 24 hours ahead**: slots that can't be booked yet show when they open ("Opens tomorrow 13:00"). Tapping one adds a calendar reminder for that moment, optionally repeating weekly (Google Calendar on Android, a calendar file elsewhere). One-off reminders link straight to the booking; weekly ones link to the group.

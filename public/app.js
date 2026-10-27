@@ -223,7 +223,11 @@ function openSheet(title, ...content) {
   dialog.addEventListener("click", (e) => {
     if (e.target === dialog) dialog.close();
   });
-  dialog.addEventListener("close", () => dialog.remove());
+  dialog.addEventListener("close", () => {
+    dialog.remove();
+    // Closing hands focus back to the opener, which would show a focus ring after a tap.
+    if (!matchMedia("(hover: hover)").matches) document.activeElement?.blur();
+  });
   document.body.append(dialog);
   dialog.showModal();
   return dialog;
@@ -946,21 +950,25 @@ function startGroup(id) {
   }
 
   /** Book now if booking has opened for this slot; otherwise offer a reminder for when it does. */
-  function bookButton(s, e, label = "Book") {
+  /** `ranged` buttons name their slot, for gaps that offer more than one. */
+  function bookButton(s, e, ranged = false) {
     const now = londonNow();
     const opens = opensAt(s);
+    const range = `${time(s)}–${time(e)}`;
     if (!isOpen(opens, now)) {
       return h(
         "button",
         {
-          class: "button book later",
+          class: ranged ? "button book later ranged" : "button book later",
           type: "button",
           onclick: () => openReminder(s, e),
           "aria-label": `Booking for ${time(s)} to ${time(e)} opens ${when(opens, now)}. Set a reminder`,
         },
-        `Opens ${when(opens, now)}`,
+        ranged && h("span", { class: "book-range tabular" }, range),
+        h("span", { class: "book-opens" }, `Opens ${when(opens, now)}`),
       );
     }
+    const label = ranged ? `Book ${range}` : "Book";
     return h(
       "a",
       {
@@ -1006,11 +1014,7 @@ function startGroup(id) {
                 h(
                   "span",
                   { class: "slot-end" },
-                  h(
-                    "span",
-                    { class: "slot-meta tabular" },
-                    e - s > MAX_BOOKING ? `${duration(e - s)} · ${Math.ceil((e - s) / MAX_BOOKING)} bookings` : duration(e - s),
-                  ),
+                  h("span", { class: "slot-meta tabular" }, duration(e - s)),
                   canBook && options.length === 1 && bookButton(s, e),
                 ),
                 canBook &&
@@ -1018,7 +1022,7 @@ function startGroup(id) {
                   h(
                     "span",
                     { class: "slot-options" },
-                    options.map(([a, b]) => bookButton(a, b, `Book ${time(a)}–${time(b)}`)),
+                    options.map(([a, b]) => bookButton(a, b, true)),
                   ),
               );
             }),
@@ -1254,7 +1258,7 @@ function startGroup(id) {
       h(
         "div",
         { class: "tl-gap", style: `top:${y(s)}px;height:${y(e) - y(s)}px` },
-        canBook && y(e) - y(s) >= 30 && bookingOptions(s, e).map(([a, b]) => bookButton(a, b, `Book ${time(a)}–${time(b)}`)),
+        canBook && y(e) - y(s) >= 30 && bookingOptions(s, e).map(([a, b]) => bookButton(a, b, true)),
       ),
     );
 

@@ -1072,6 +1072,25 @@ button.status:active {
   background: transparent;
 }
 
+.button.book.ranged {
+  flex-direction: column;
+  gap: 0;
+  height: auto;
+  min-height: 44px;
+  padding: 5px 14px;
+  border-radius: 12px;
+  line-height: 1.25;
+}
+
+.book-range {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.book-opens {
+  font-size: 12px;
+}
+
 .check {
   display: flex;
   align-items: center;
