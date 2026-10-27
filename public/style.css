@@ -1114,3 +1114,7 @@ button.status:active {
   font-size: 17px;
   font-weight: 650;
 }
+
+.share-proof {
+  margin-top: 24px;
+}

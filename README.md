@@ -14,6 +14,8 @@ For each day:
 - **Booked rooms**: each booking in time order, with who booked it next to the room, the building, times and length, plus a timeline where longer bookings get bigger room numbers.
 - **Booking opens 24 hours ahead**: slots that can't be booked yet show when they open ("Opens tomorrow 13:00"). Tapping one adds a calendar reminder for that moment, optionally repeating weekly (Google Calendar on Android, a calendar file elsewhere). One-off reminders link straight to the booking; weekly ones link to the group.
 
+Tapping a booking shows its details and a **Share proof** button, which makes an image of the booking (room, date, times, who booked it, the RB reference) to send to the group, noting it came from the university's timetable feed and when it was checked.
+
 Timetable links stay on the server. The browser only receives names and bookings.
 
 ## Deploy (Netlify)

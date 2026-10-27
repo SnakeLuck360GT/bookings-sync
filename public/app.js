@@ -235,6 +235,103 @@ function openSheet(title, ...content) {
 
 let fieldCount = 0;
 
+/* ---------- Proof of a booking ---------- */
+
+/**
+ * Draw a booking as a shareable image, so the group can pass proof around.
+ * It shows what the university's feed says and when it was checked.
+ */
+function proofImage(member, event) {
+  const W = 1080;
+  const H = 1350;
+  const X = 120;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const g = canvas.getContext("2d");
+  const font = (weight, px) => `${weight} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+
+  g.fillStyle = "#f7f7f5";
+  g.fillRect(0, 0, W, H);
+  g.beginPath();
+  g.roundRect(56, 56, W - 112, H - 112, 44);
+  g.fillStyle = "#ffffff";
+  g.fill();
+  g.strokeStyle = "#e6e5e1";
+  g.lineWidth = 2;
+  g.stroke();
+
+  let y = 190;
+  g.fillStyle = event.pending ? "#b06a00" : "#2f7d4f";
+  g.font = font(600, 36);
+  g.fillText(event.pending ? "Room booking · pending" : "Room booking · confirmed", X, y);
+
+  y += 110;
+  g.fillStyle = "#1c1c1a";
+  g.font = font(700, 104);
+  g.fillText(event.room || event.location || NO_ROOM, X, y, W - 2 * X);
+  if (event.building) {
+    y += 70;
+    g.fillStyle = "#6b6b66";
+    g.font = font(400, 46);
+    g.fillText(event.building, X, y);
+  }
+
+  y += 60;
+  g.fillStyle = "#e6e5e1";
+  g.fillRect(X, y, W - 2 * X, 2);
+
+  const year = event.day.slice(0, 4);
+  const rows = [
+    ["Booking title", event.title],
+    ["Date", `${dayOfMonth(event.day)} ${monthOf(event.day)} ${year}`],
+    ["Day", LONG_DAY_NAMES[weekday(event.day)]],
+    ["Starts", time(event.start)],
+    ["Ends", time(event.end)],
+    ["Booked by", member.name],
+    ["Reference", event.reference],
+  ].filter(([, value]) => value);
+  y += 40;
+  for (const [label, value] of rows) {
+    y += 76;
+    g.fillStyle = "#6b6b66";
+    g.font = font(400, 38);
+    g.fillText(label, X, y);
+    g.fillStyle = "#1c1c1a";
+    g.font = font(600, 44);
+    g.fillText(value, X + 330, y, W - 2 * X - 330);
+  }
+
+  const checked = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
+  g.fillStyle = "#8a8a85";
+  g.font = font(400, 30);
+  g.fillText("From the University of Manchester timetable feed.", X, H - 170);
+  g.fillText(`Checked ${checked}. Shared from Bookings.`, X, H - 126);
+
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+async function shareProof(member, event) {
+  const blob = await proofImage(member, event);
+  const name = `booking-${(event.reference || `${event.day}-${event.room}`).replace(/[^A-Za-z0-9-]+/g, "-")}.png`;
+  const file = new File([blob], name, { type: "image/png" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: `${event.room} booking` });
+    } catch {}
+    return;
+  }
+  const a = h("a", { href: URL.createObjectURL(blob), download: name });
+  a.click();
+}
+
 /* ---------- Shared form parts ---------- */
 
 /** Remember who you are in a group on this device, and list it on the home page. */
@@ -714,6 +811,11 @@ function startGroup(id) {
         event.title && row("Name", event.title),
         event.reference && row("Ref", h("span", { class: "tabular" }, event.reference)),
         event.pending && row("Status", "Pending"),
+      ),
+      h(
+        "button",
+        { class: "button primary share-proof", type: "button", onclick: () => shareProof(member, event) },
+        "Share proof",
       ),
     );
   }
