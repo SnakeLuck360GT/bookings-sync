@@ -901,15 +901,12 @@ function startGroup(id) {
     );
   }
 
-  function gaps(bookings, now, members) {
-    if (state.day < now.day) return null;
+  /** Unbooked stretches of the selected day, and whether you can still book one. */
+  function openGaps(bookings, now) {
+    if (state.day < now.day) return { open: [], canBook: false };
     const { from, to, min } = state.prefs;
-    const isToday = state.day === now.day;
-    // One booking a day: only offer to book if you haven't used yours.
-    const me = self();
-    const canBook = !me || !bookings.some((b) => b.member.id === me.id);
     // Today, gaps start no earlier than the next quarter hour.
-    const earliest = isToday ? Math.ceil(now.minutes / 15) * 15 : 0;
+    const earliest = state.day === now.day ? Math.ceil(now.minutes / 15) * 15 : 0;
     const open = uncovered(
       bookings.map((b) => b.event),
       from,
@@ -918,6 +915,30 @@ function startGroup(id) {
     )
       .map(([s, e]) => [Math.max(s, earliest), e])
       .filter(([s, e]) => e - s >= min);
+    // One booking a day: only offer to book if you haven't used yours.
+    const me = self();
+    return { open, canBook: !me || !bookings.some((b) => b.member.id === me.id) };
+  }
+
+  function bookButton(s, e, label = "Book") {
+    return h(
+      "a",
+      {
+        class: "button book",
+        href: bookingLink(state.day, s, e),
+        target: "_blank",
+        rel: "noopener",
+        "aria-label": `Book a room for ${time(s)} to ${time(e)}`,
+      },
+      label,
+    );
+  }
+
+  function gaps(bookings, now, members) {
+    if (state.day < now.day) return null;
+    const { from, to, min } = state.prefs;
+    const isToday = state.day === now.day;
+    const { open, canBook } = openGaps(bookings, now);
 
     return h(
       "section",
@@ -949,18 +970,7 @@ function startGroup(id) {
                     { class: "slot-meta tabular" },
                     e - s > MAX_BOOKING ? `${duration(e - s)} · ${Math.ceil((e - s) / MAX_BOOKING)} bookings` : duration(e - s),
                   ),
-                  canBook &&
-                    h(
-                      "a",
-                      {
-                        class: "button book",
-                        href: bookingLink(state.day, s, e),
-                        target: "_blank",
-                        rel: "noopener",
-                        "aria-label": `Book a room for ${time(s)} to ${time(e)}`,
-                      },
-                      "Book",
-                    ),
+                  canBook && bookButton(s, e),
                 ),
               );
             }),
@@ -1058,8 +1068,14 @@ function startGroup(id) {
   }
 
   function timeline(data) {
-    const rooms = roomsFor(included(data.members), state.day);
-    if (!rooms.length) return null;
+    const people = included(data.members);
+    if (!people.length) return null;
+    const rooms = roomsFor(people, state.day);
+    const now = londonNow();
+    const { open, canBook } = openGaps(
+      rooms.flatMap((room) => room.bookings),
+      now,
+    );
 
     let first = Math.floor(state.prefs.from / 60);
     let last = Math.ceil(state.prefs.to / 60);
@@ -1072,7 +1088,6 @@ function startGroup(id) {
 
     const hourPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour")) || 52;
     const y = (minutes) => ((minutes - first * 60) / 60) * hourPx;
-    const now = londonNow();
 
     const hours = [];
     for (let hr = first; hr <= last; hr++) {
@@ -1093,9 +1108,24 @@ function startGroup(id) {
               "aria-label": `${room.room}: ${member.name}, ${time(event.start)} to ${time(event.end)}`,
               onclick: () => openBooking(member, event),
             },
-            y(event.end) - y(event.start) >= 24 && h("span", {}, member.name),
+            y(event.end) - y(event.start) >= 24 &&
+              h(
+                "span",
+                {},
+                h("strong", {}, room.room),
+                y(event.end) - y(event.start) >= 40 && h("br"),
+                y(event.end) - y(event.start) >= 40 && member.name,
+              ),
           ),
         ),
+      ),
+    );
+
+    const bands = open.map(([s, e]) =>
+      h(
+        "div",
+        { class: "tl-gap", style: `top:${y(s)}px;height:${y(e) - y(s)}px` },
+        canBook && y(e) - y(s) >= 30 && bookButton(s, e, `Book ${time(s)}–${time(e)}`),
       ),
     );
 
@@ -1103,7 +1133,7 @@ function startGroup(id) {
 
     return h(
       "section",
-      { class: "timeline", style: `--cols:${rooms.length}`, "aria-label": "Rooms through the day" },
+      { class: "timeline", style: `--cols:${Math.max(rooms.length, 1)}`, "aria-label": "Rooms through the day" },
       h(
         "div",
         { class: "tl-scroll" },
@@ -1114,12 +1144,15 @@ function startGroup(id) {
             "div",
             { class: "tl-head" },
             h("span"),
-            rooms.map((room) => h("div", { class: "tl-name" }, h("span", {}, room.room))),
+            rooms.length
+              ? rooms.map((room) => h("div", { class: "tl-name" }, h("span", {}, room.room)))
+              : h("div", { class: "tl-name" }, h("span", {}, "No rooms booked")),
           ),
           h(
             "div",
             { class: "tl-body", style: `height:${y(last * 60)}px` },
             hours,
+            bands,
             h("div", { class: "tl-cols" }, columns),
             showNow && h("div", { class: "tl-now", style: `top:${y(now.minutes)}px` }),
           ),

@@ -1031,3 +1031,32 @@ button.status:active {
   color: var(--text);
   text-decoration: none;
 }
+
+/* Gaps on the timeline */
+
+.tl-gap {
+  position: absolute;
+  left: var(--gutter);
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 6px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--free) 6%, transparent);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.tl-gap .button.book {
+  pointer-events: auto;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: var(--bg);
+}
+
+.event strong {
+  font-weight: 600;
+}
