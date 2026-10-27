@@ -93,6 +93,9 @@ function uncovered(events, from, to, min) {
   return gaps.filter(([s, e]) => e - s >= min);
 }
 
+// A single booking can be at most this long, so longer gaps need several.
+const MAX_BOOKING = 3 * 60;
+
 /** Bookings for a day grouped by room, in order of first booking. */
 function roomsFor(members, day) {
   const rooms = new Map();
@@ -905,12 +908,16 @@ function startGroup(id) {
     // One booking a day: only offer to book if you haven't used yours.
     const me = self();
     const canBook = !me || !bookings.some((b) => b.member.id === me.id);
+    // Today, gaps start no earlier than the next quarter hour.
+    const earliest = isToday ? Math.ceil(now.minutes / 15) * 15 : 0;
     const open = uncovered(
       bookings.map((b) => b.event),
       from,
       to,
       min,
-    ).filter(([, e]) => !isToday || e > now.minutes);
+    )
+      .map(([s, e]) => [Math.max(s, earliest), e])
+      .filter(([s, e]) => e - s >= min);
 
     return h(
       "section",
@@ -930,10 +937,9 @@ function startGroup(id) {
             "ul",
             { class: "slots" },
             open.map(([s, e]) => {
-              const current = isToday && s <= now.minutes;
               return h(
                 "li",
-                { class: current ? "slot now" : "slot" },
+                { class: "slot" },
                 h("span", { class: "slot-time tabular" }, `${time(s)} – ${time(e)}`),
                 h(
                   "span",
@@ -941,15 +947,14 @@ function startGroup(id) {
                   h(
                     "span",
                     { class: "slot-meta tabular" },
-                    current ? `Now · ${duration(e - now.minutes)} left` : duration(e - s),
+                    e - s > MAX_BOOKING ? `${duration(e - s)} · ${Math.ceil((e - s) / MAX_BOOKING)} bookings` : duration(e - s),
                   ),
                   canBook &&
                     h(
                       "a",
                       {
                         class: "button book",
-                        // A gap that's already started is searched from the next quarter hour.
-                        href: bookingLink(state.day, current ? Math.min(Math.ceil(now.minutes / 15) * 15, e) : s, e),
+                        href: bookingLink(state.day, s, e),
                         target: "_blank",
                         rel: "noopener",
                         "aria-label": `Book a room for ${time(s)} to ${time(e)}`,

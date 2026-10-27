@@ -9,7 +9,7 @@ Each group has a 6-character code (like `K7M2QX`). To join, enter your name and 
 For each day:
 
 - **Status**: "No room booked yet", the room booked right now and until when, or the next room.
-- **Gaps to book**: times between 9:00 and 18:00 that no booking covers (adjustable).
+- **Gaps to book**: times between 9:00 and 18:00 that no booking covers (adjustable), with how many 3-hour bookings each needs and a Book button that opens Resource Booker for that day and time.
 - **Booking left**: who hasn't used their one booking for that day.
 - **Booked rooms**: each room with building, who booked it, times and total hours, plus a timeline.
 
