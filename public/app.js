@@ -384,7 +384,7 @@ function memberForm({ submitLabel, onSubmit }) {
  * Name and group code. A name already in the group signs you in as them;
  * a new name asks for a timetable link and joins.
  */
-function joinForm() {
+function joinForm({ code: prefill = "", submitLabel = "Join" } = {}) {
   const name = nameInput();
   const code = h("input", {
     name: "code",
@@ -397,6 +397,7 @@ function joinForm() {
     placeholder: "K7M2QX",
     enterkeyhint: "go",
   });
+  code.value = prefill;
   code.id = `field-${++fieldCount}`;
   const link = linkInput();
   const newcomer = h(
@@ -409,15 +410,15 @@ function joinForm() {
 
   const el = form(
     {
-      submitLabel: "Join",
-      busyLabel: "Joining…",
+      submitLabel,
+      busyLabel: "Checking…",
       onSubmit: async () => {
         const who = required(name, "Add your name.").trim();
         const value = required(code, "Enter your group code.").trim().toUpperCase();
         if (group?.id !== value) {
           group = await api(`/groups/${encodeURIComponent(value)}`);
           newcomer.hidden = true;
-          el.setLabel("Join");
+          el.setLabel(submitLabel);
         }
 
         const match = group.members.find((m) => m.name.toLowerCase() === who.toLowerCase());
@@ -633,25 +634,6 @@ function startGroup(id) {
     }
   }
 
-  function openAdd() {
-    const sheet = openSheet(
-      "Add your timetable",
-      memberForm({
-        submitLabel: "Add timetable",
-        onSubmit: async (body) => {
-          const { group, me } = await api(`/groups/${id}/members`, { method: "POST", body });
-          state.group = group;
-          state.me = me;
-          remember(id, me, body.name);
-          sheet.close();
-          toast("You're in");
-          reloadAll();
-          render();
-        },
-      }),
-    );
-  }
-
   function toggle(member) {
     if (state.hidden.has(member.id)) state.hidden.delete(member.id);
     else state.hidden.add(member.id);
@@ -752,43 +734,20 @@ function startGroup(id) {
     );
   }
 
-  function signIn(member) {
-    state.me = member.id;
-    remember(id, member.id, member.name);
-    render();
-  }
-
-  function signOut() {
+  function logOut() {
     state.me = null;
-    saved.set(`me:${id}`, null);
+    forget(id);
     render();
   }
 
+  /** Not logged in on this device: log in with your name and the group code. */
   function callout() {
     if (self()) return null;
-    const members = state.group.members;
     return h(
       "div",
       { class: "callout" },
-      h("p", {}, members.length ? "Who are you?" : "Add your timetable to get started."),
-      members.length > 0 &&
-        h(
-          "div",
-          { class: "people" },
-          members.map((m) =>
-            h(
-              "button",
-              { class: "chip", type: "button", style: `--c: var(--m${m.colour})`, onclick: () => signIn(m) },
-              h("span", { class: "dot" }),
-              h("span", { class: "chip-name" }, m.name),
-            ),
-          ),
-        ),
-      h(
-        "button",
-        { class: "button primary", type: "button", onclick: openAdd },
-        members.length ? "I'm new here" : "Add my timetable",
-      ),
+      h("h2", { class: "callout-title" }, "Log in"),
+      joinForm({ code: id, submitLabel: "Log in" }),
     );
   }
 
@@ -798,8 +757,8 @@ function startGroup(id) {
     return h(
       "p",
       { class: "footer" },
-      `You're ${me.name}. `,
-      h("button", { class: "link", type: "button", onclick: signOut }, "Switch"),
+      `Logged in as ${me.name}. `,
+      h("button", { class: "link", type: "button", onclick: logOut }, "Log out"),
     );
   }
 
@@ -827,7 +786,6 @@ function startGroup(id) {
     const controls = state.editing
       ? [h("button", { class: "chip quiet", type: "button", onclick: () => ((state.editing = false), render()) }, "Done")]
       : [
-          self() && h("button", { class: "chip", type: "button", onclick: openAdd }, "+ Add"),
           state.group.members.length > 0 &&
             h("button", { class: "chip quiet", type: "button", onclick: () => ((state.editing = true), render()) }, "Edit"),
         ];

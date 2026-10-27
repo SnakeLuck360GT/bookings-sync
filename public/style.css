@@ -96,6 +96,11 @@ p {
   margin: 0;
 }
 
+/* Classes that set display would otherwise override the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 .page {
   max-width: 560px;
   margin: 0 auto;
@@ -1103,4 +1108,9 @@ button.status:active {
   height: 20px;
   margin: 0;
   accent-color: var(--text);
+}
+
+.callout-title {
+  font-size: 17px;
+  font-weight: 650;
 }
