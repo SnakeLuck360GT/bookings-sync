@@ -1011,3 +1011,23 @@ button.status:active {
   font-size: 14px;
   color: var(--muted);
 }
+
+/* Book buttons on gaps */
+
+.slot {
+  align-items: center;
+}
+
+.slot-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.button.book {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+}

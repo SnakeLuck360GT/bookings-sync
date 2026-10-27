@@ -4,6 +4,15 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DEFAULT_PREFS = { from: 9 * 60, to: 18 * 60, min: 30 };
 const NO_ROOM = "Room not listed";
+// Where "Book" sends people: Resource Booker's room search for a day and
+// time range. You log in there yourself; this app never does.
+const BOOKING_URL = "https://resourcebooker.manchester.ac.uk/app/booking-types/a0ad7d46-d2f6-428d-aeba-04a0acc03503";
+
+function bookingLink(day, from, to) {
+  const hhmm = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  const params = new URLSearchParams({ firstDay: day, fromTime: hhmm(from), toTime: hhmm(to) });
+  return `${BOOKING_URL}?${params}`;
+}
 
 /* ---------- Dates, always in UK time ---------- */
 
@@ -163,7 +172,8 @@ function h(tag, attrs, ...children) {
 const icons = {
   prev: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>',
   next: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg>',
-  close: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m5 5 10 10M15 5 5 15"/></svg>',
+  close:
+    '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m5 5 10 10M15 5 5 15"/></svg>',
 };
 
 function iconButton(name, label, onclick) {
@@ -185,7 +195,12 @@ function openSheet(title, ...content) {
   const dialog = h(
     "dialog",
     { class: "sheet", "aria-label": title },
-    h("div", { class: "sheet-head" }, h("h2", {}, title), iconButton("close", "Close", () => dialog.close())),
+    h(
+      "div",
+      { class: "sheet-head" },
+      h("h2", {}, title),
+      iconButton("close", "Close", () => dialog.close()),
+    ),
     ...content,
   );
   dialog.addEventListener("click", (e) => {
@@ -277,7 +292,11 @@ function linkInput() {
       h("code", {}, ".ics"),
       ".",
     ),
-    h("p", {}, "Rooms you book through the university show up in it automatically. Friends only see your bookings, not your classes."),
+    h(
+      "p",
+      {},
+      "Rooms you book through the university show up in it automatically. Friends only see your bookings, not your classes.",
+    ),
   );
 
   return { input, field: h("div", { class: "field" }, h("label", { for: input.id }, "Timetable link"), wrap, help) };
@@ -421,11 +440,7 @@ function renderHome() {
         ["join", "Join a group"],
         ["create", "Create a group"],
       ].map(([value, label]) =>
-        h(
-          "button",
-          { type: "button", "aria-pressed": String(mode === value), onclick: () => ((mode = value), show()) },
-          label,
-        ),
+        h("button", { type: "button", "aria-pressed": String(mode === value), onclick: () => ((mode = value), show()) }, label),
       ),
     );
     panel.replaceChildren(
@@ -479,7 +494,11 @@ function renderHome() {
         ),
       tabs,
       panel,
-      h("p", { class: "note" }, "Your link stays private. Friends see your room bookings, never your classes or the link itself."),
+      h(
+        "p",
+        { class: "note" },
+        "Your link stays private. Friends see your room bookings, never your classes or the link itself.",
+      ),
     ),
   );
 }
@@ -743,7 +762,11 @@ function startGroup(id) {
             ),
           ),
         ),
-      h("button", { class: "button primary", type: "button", onclick: openAdd }, members.length ? "I'm new here" : "Add my timetable"),
+      h(
+        "button",
+        { class: "button primary", type: "button", onclick: openAdd },
+        members.length ? "I'm new here" : "Add my timetable",
+      ),
     );
   }
 
@@ -793,7 +816,8 @@ function startGroup(id) {
   function weekNav() {
     const thisWeek = mondayOf(londonNow().day);
     const offset = Math.round((Date.parse(state.week) - Date.parse(thisWeek)) / (7 * 864e5));
-    const label = { 0: "This week", 1: "Next week", [-1]: "Last week" }[offset] ?? `Week of ${dayOfMonth(state.week)} ${monthOf(state.week)}`;
+    const label =
+      { 0: "This week", 1: "Next week", [-1]: "Last week" }[offset] ?? `Week of ${dayOfMonth(state.week)} ${monthOf(state.week)}`;
     return h(
       "nav",
       { class: "week", "aria-label": "Week" },
@@ -852,7 +876,12 @@ function startGroup(id) {
       h("span", { class: "status-label" }, label, event.pending && " · pending"),
       h("span", { class: "status-room" }, event.room || event.location || NO_ROOM),
       h("span", { class: "status-meta tabular" }, [event.building, when].filter(Boolean).join(" · ")),
-      h("span", { class: "booked-by", style: `--c: var(--m${member.colour})` }, h("span", { class: "dot" }), `Booked by ${member.name}`),
+      h(
+        "span",
+        { class: "booked-by", style: `--c: var(--m${member.colour})` },
+        h("span", { class: "dot" }),
+        `Booked by ${member.name}`,
+      ),
     );
   }
 
@@ -873,6 +902,9 @@ function startGroup(id) {
     if (state.day < now.day) return null;
     const { from, to, min } = state.prefs;
     const isToday = state.day === now.day;
+    // One booking a day: only offer to book if you haven't used yours.
+    const me = self();
+    const canBook = !me || !bookings.some((b) => b.member.id === me.id);
     const open = uncovered(
       bookings.map((b) => b.event),
       from,
@@ -887,7 +919,11 @@ function startGroup(id) {
         "div",
         { class: "section-head" },
         h("h2", {}, "Gaps to book"),
-        h("button", { class: "link tabular", type: "button", onclick: openPrefs }, `${time(from)}–${time(to)} · ${duration(min)}+`),
+        h(
+          "button",
+          { class: "link tabular", type: "button", onclick: openPrefs },
+          `${time(from)}–${time(to)} · ${duration(min)}+`,
+        ),
       ),
       open.length
         ? h(
@@ -899,11 +935,36 @@ function startGroup(id) {
                 "li",
                 { class: current ? "slot now" : "slot" },
                 h("span", { class: "slot-time tabular" }, `${time(s)} – ${time(e)}`),
-                h("span", { class: "slot-meta tabular" }, current ? `Now · ${duration(e - now.minutes)} left` : duration(e - s)),
+                h(
+                  "span",
+                  { class: "slot-end" },
+                  h(
+                    "span",
+                    { class: "slot-meta tabular" },
+                    current ? `Now · ${duration(e - now.minutes)} left` : duration(e - s),
+                  ),
+                  canBook &&
+                    h(
+                      "a",
+                      {
+                        class: "button book",
+                        // A gap that's already started is searched from the next quarter hour.
+                        href: bookingLink(state.day, current ? Math.min(Math.ceil(now.minutes / 15) * 15, e) : s, e),
+                        target: "_blank",
+                        rel: "noopener",
+                        "aria-label": `Book a room for ${time(s)} to ${time(e)}`,
+                      },
+                      "Book",
+                    ),
+                ),
               );
             }),
           )
-        : h("p", { class: "empty" }, isToday && bookings.length ? "Nothing left to book today." : `Booked from ${time(from)} to ${time(to)}.`),
+        : h(
+            "p",
+            { class: "empty" },
+            isToday && bookings.length ? "Nothing left to book today." : `Booked from ${time(from)} to ${time(to)}.`,
+          ),
       stillToBook(members, bookings),
     );
   }
@@ -940,7 +1001,12 @@ function startGroup(id) {
                     type: "button",
                     onclick: () => openBooking(member, event),
                   },
-                  h("span", { class: "booking-who", style: `--c: var(--m${member.colour})` }, h("span", { class: "dot" }), member.name),
+                  h(
+                    "span",
+                    { class: "booking-who", style: `--c: var(--m${member.colour})` },
+                    h("span", { class: "dot" }),
+                    member.name,
+                  ),
                   h("span", { class: "booking-time tabular" }, `${time(event.start)} – ${time(event.end)}`),
                   h("span", { class: "booking-len tabular" }, current ? "Now" : duration(event.end - event.start)),
                 ),
@@ -956,7 +1022,13 @@ function startGroup(id) {
     if (!included(state.group.members).length) return h("p", { class: "empty" }, "Tap a name above to include them.");
     if (!entry || entry.loading) return h("p", { class: "loading" }, "Loading bookings…");
     if (entry.error) {
-      return h("p", { class: "empty" }, entry.error, " ", h("button", { class: "link", type: "button", onclick: reloadAll }, "Retry"));
+      return h(
+        "p",
+        { class: "empty" },
+        entry.error,
+        " ",
+        h("button", { class: "link", type: "button", onclick: reloadAll }, "Retry"),
+      );
     }
 
     const now = londonNow();
@@ -1033,7 +1105,12 @@ function startGroup(id) {
         h(
           "div",
           { class: "tl-inner" },
-          h("div", { class: "tl-head" }, h("span"), rooms.map((room) => h("div", { class: "tl-name" }, h("span", {}, room.room)))),
+          h(
+            "div",
+            { class: "tl-head" },
+            h("span"),
+            rooms.map((room) => h("div", { class: "tl-name" }, h("span", {}, room.room))),
+          ),
           h(
             "div",
             { class: "tl-body", style: `height:${y(last * 60)}px` },
