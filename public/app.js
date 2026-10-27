@@ -1,6 +1,7 @@
 const app = document.getElementById("app");
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const LONG_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 // Rooms can't be booked before 10:00.
 const BOOKING_OPENS = 10 * 60;
@@ -10,8 +11,9 @@ const NO_ROOM = "Room not listed";
 // time range. You log in there yourself; this app never does.
 const BOOKING_URL = "https://resourcebooker.manchester.ac.uk/app/booking-types/a0ad7d46-d2f6-428d-aeba-04a0acc03503";
 
+const hhmm = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
 function bookingLink(day, from, to) {
-  const hhmm = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
   const params = new URLSearchParams({ firstDay: day, fromTime: hhmm(from), toTime: hhmm(to) });
   return `${BOOKING_URL}?${params}`;
 }
@@ -933,7 +935,32 @@ function startGroup(id) {
     return { open, canBook: !me || !bookings.some((b) => b.member.id === me.id) };
   }
 
+  // A room can be booked from 24 hours before it starts.
+  const opensAt = (s) => ({ day: addDays(state.day, -1), minutes: s });
+  const isOpen = ({ day, minutes }, now) => now.day > day || (now.day === day && now.minutes >= minutes);
+
+  function when({ day, minutes }, now) {
+    if (day === now.day) return time(minutes);
+    if (day === addDays(now.day, 1)) return `tomorrow ${time(minutes)}`;
+    return `${DAY_NAMES[weekday(day)]} ${time(minutes)}`;
+  }
+
+  /** Book now if booking has opened for this slot; otherwise offer a reminder for when it does. */
   function bookButton(s, e, label = "Book") {
+    const now = londonNow();
+    const opens = opensAt(s);
+    if (!isOpen(opens, now)) {
+      return h(
+        "button",
+        {
+          class: "button book later",
+          type: "button",
+          onclick: () => openReminder(s, e),
+          "aria-label": `Booking for ${time(s)} to ${time(e)} opens ${when(opens, now)}. Set a reminder`,
+        },
+        `Opens ${when(opens, now)}`,
+      );
+    }
     return h(
       "a",
       {
@@ -1002,51 +1029,42 @@ function startGroup(id) {
             isToday && bookings.length ? "Nothing left to book today." : `Booked from ${time(from)} to ${time(to)}.`,
           ),
       stillToBook(members, bookings),
-      canBook &&
-        open.length > 0 &&
-        h(
-          "p",
-          { class: "hint" },
-          h("button", { class: "link", type: "button", onclick: () => openReminder(open) }, "Remind me to book"),
-        ),
     );
   }
 
-  /** A calendar reminder to book a room for the selected day. */
-  function openReminder(open) {
+  /** A calendar reminder for when booking opens for one slot, optionally every week. */
+  function openReminder(s, e) {
     const day = state.day;
+    const opens = opensAt(s);
     const label = `${DAY_NAMES[weekday(day)]} ${dayOfMonth(day)} ${monthOf(day)}`;
-    // Link to the longest gap, since that's the one most worth booking.
-    const longest = open.reduce((a, b) => (b[1] - b[0] > a[1] - a[0] ? b : a));
-    const link = bookingLink(day, ...bookingOptions(...longest)[0]);
-    const title = `Book a room for ${label}`;
-    const details = `Gaps: ${open.map(([s, e]) => `${time(s)}–${time(e)}`).join(", ")}\nBook: ${link}`;
+    const link = bookingLink(day, s, e);
+    const title = `Book a room for ${time(s)}–${time(e)}`;
+    // A weekly reminder can't carry one date's Book link, so it links to this group instead.
+    const details = () =>
+      repeat.checked
+        ? `Booking opens now for tomorrow (${LONG_DAY_NAMES[weekday(day)]}), ${time(s)}–${time(e)}.\nOpen: ${location.origin}/g/${id}`
+        : `Booking opens now for ${label}, ${time(s)}–${time(e)}.\nBook: ${link}`;
 
-    // Default: the day before at 9:00, or in 15 minutes if that's already passed.
-    const pad = (n) => String(n).padStart(2, "0");
-    const local = (d) =>
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    let at = new Date(`${addDays(day, -1)}T09:00`);
-    if (at < new Date()) at = new Date(Date.now() + 15 * 60 * 1000);
-    const input = h("input", { type: "datetime-local", value: local(at) });
+    const input = h("input", { type: "datetime-local", value: `${opens.day}T${hhmm(opens.minutes)}` });
     input.id = `field-${++fieldCount}`;
+    const repeat = h("input", { type: "checkbox" });
 
-    const utc = (d) =>
-      d
-        .toISOString()
-        .replace(/[-:]/g, "")
-        .replace(/\.\d{3}/, "");
+    // Reminder times are UK wall-clock, so a weekly reminder stays put when the clocks change.
+    const stamp = (d) => d.toISOString().slice(0, 19).replace(/[-:]/g, "");
     function add() {
-      const start = new Date(input.value);
+      // Read the chosen wall-clock time as if UTC, purely to do date arithmetic on it.
+      const start = new Date(`${input.value}Z`);
       if (Number.isNaN(start.getTime())) return;
       const end = new Date(start.getTime() + 15 * 60 * 1000);
       if (/Android/i.test(navigator.userAgent)) {
         const params = new URLSearchParams({
           action: "TEMPLATE",
           text: title,
-          dates: `${utc(start)}/${utc(end)}`,
-          details,
+          dates: `${stamp(start)}/${stamp(end)}`,
+          ctz: "Europe/London",
+          details: details(),
         });
+        if (repeat.checked) params.set("recur", "RRULE:FREQ=WEEKLY");
         window.open(`https://calendar.google.com/calendar/render?${params}`, "_blank", "noopener");
       } else {
         const ics = [
@@ -1054,14 +1072,15 @@ function startGroup(id) {
           "VERSION:2.0",
           "PRODID:-//Bookings//EN",
           "BEGIN:VEVENT",
-          `UID:${utc(start)}-${day}@bookings`,
-          `DTSTAMP:${utc(new Date())}`,
-          `DTSTART:${utc(start)}`,
-          `DTEND:${utc(end)}`,
+          `UID:${stamp(start)}-${day}-${s}@bookings`,
+          `DTSTAMP:${stamp(new Date())}Z`,
+          `DTSTART;TZID=Europe/London:${stamp(start)}`,
+          `DTEND;TZID=Europe/London:${stamp(end)}`,
+          repeat.checked && "RRULE:FREQ=WEEKLY",
           `SUMMARY:${title}`,
           // iCalendar text escapes commas and newlines.
-          `DESCRIPTION:${details.replace(/,/g, "\\,").replace(/\n/g, "\\n")}`,
-          `URL:${link}`,
+          `DESCRIPTION:${details().replace(/,/g, "\\,").replace(/\n/g, "\\n")}`,
+          `URL:${repeat.checked ? `${location.origin}/g/${id}` : link}`,
           "BEGIN:VALARM",
           "ACTION:DISPLAY",
           `DESCRIPTION:${title}`,
@@ -1069,7 +1088,9 @@ function startGroup(id) {
           "END:VALARM",
           "END:VEVENT",
           "END:VCALENDAR",
-        ].join("\r\n");
+        ]
+          .filter(Boolean)
+          .join("\r\n");
         const a = h("a", { href: URL.createObjectURL(new Blob([ics], { type: "text/calendar" })), download: "book-a-room.ics" });
         a.click();
       }
@@ -1081,8 +1102,13 @@ function startGroup(id) {
       h(
         "div",
         { class: "form" },
-        h("p", { class: "field-note" }, `A reminder in your calendar to book a room for ${label}, with the Book link in it.`),
+        h(
+          "p",
+          { class: "field-note" },
+          `Booking for ${label}, ${time(s)}–${time(e)} opens ${DAY_NAMES[weekday(opens.day)]} ${dayOfMonth(opens.day)} ${monthOf(opens.day)} at ${time(opens.minutes)}. This adds a reminder to your calendar with a link to book.`,
+        ),
         h("div", { class: "field" }, h("label", { for: input.id }, "Remind me at"), input),
+        h("label", { class: "check" }, repeat, `Repeat every ${LONG_DAY_NAMES[weekday(opens.day)]}`),
         h("button", { class: "button primary", type: "button", onclick: add }, "Add reminder"),
       ),
     );

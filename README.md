@@ -12,7 +12,7 @@ For each day:
 - **Gaps to book**: times between 10:00 (when booking opens) and 18:00 that no booking covers, with how many bookings each needs. A Book button opens Resource Booker for that day and time; gaps longer than the 3-hour limit offer two options, the first or last 3 hours.
 - **Booking left**: who hasn't used their one booking for that day.
 - **Booked rooms**: each booking in time order, with who booked it next to the room, the building, times and length, plus a timeline where longer bookings get bigger room numbers.
-- **Remind me to book**: adds a reminder to your calendar with the Book link (Google Calendar on Android, a calendar file elsewhere).
+- **Booking opens 24 hours ahead**: slots that can't be booked yet show when they open ("Opens tomorrow 13:00"). Tapping one adds a calendar reminder for that moment, optionally repeating weekly (Google Calendar on Android, a calendar file elsewhere). One-off reminders link straight to the booking; weekly ones link to the group.
 
 Timetable links stay on the server. The browser only receives names and bookings.
 

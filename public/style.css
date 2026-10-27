@@ -1065,3 +1065,23 @@ button.status:active {
   letter-spacing: -0.01em;
   line-height: 1.3;
 }
+
+.button.book.later {
+  border-style: dashed;
+  color: var(--muted);
+  background: transparent;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--text);
+}
