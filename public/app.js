@@ -875,21 +875,49 @@ function startGroup(id) {
     if (!event.verifiable) return null;
     const now = londonNow();
     const opens = Math.max(event.start - PROOF_EARLY, 0);
-    const started = event.day < now.day || (event.day === now.day && opens <= now.minutes);
     const ended = event.day < now.day || (event.day === now.day && event.end <= now.minutes);
     if (ended) return null;
-    if (!started) {
-      return h(
-        "p",
-        { class: "field-note share-proof" },
-        `Proof is available from ${time(opens)} on ${LONG_DAY_NAMES[weekday(event.day)]}, ${PROOF_EARLY} minutes before the booking starts.`,
-      );
+
+    const button = h("button", { class: "button primary share-proof", type: "button" });
+    const ready = () => {
+      button.disabled = false;
+      button.textContent = "Open proof";
+      button.onclick = () => openProof(member, event);
+    };
+
+    // Seconds until proof opens, counting whole days between today and the booking's day.
+    const secondsLeft = () => {
+      const { day, minutes } = londonNow();
+      const days = Math.round((Date.parse(event.day) - Date.parse(day)) / 864e5);
+      return days * 86400 + opens * 60 - (minutes * 60 + new Date().getSeconds());
+    };
+    const two = (n) => String(n).padStart(2, "0");
+    const tick = () => {
+      const left = secondsLeft();
+      if (left <= 0) {
+        clearInterval(timer);
+        return ready();
+      }
+      if (!button.isConnected && button.dataset.shown) return clearInterval(timer);
+      button.disabled = true;
+      const hours = Math.floor(left / 3600);
+      const mins = Math.floor((left % 3600) / 60);
+      button.textContent =
+        left >= 86400
+          ? `Proof opens ${DAY_NAMES[weekday(event.day)]} ${time(opens)}`
+          : hours
+            ? `Proof in ${hours}h ${two(mins)}m`
+            : `Proof in ${mins}:${two(left % 60)}`;
+    };
+
+    if (secondsLeft() <= 0) {
+      ready();
+      return button;
     }
-    return h(
-      "button",
-      { class: "button primary share-proof", type: "button", onclick: () => openProof(member, event) },
-      "Open proof",
-    );
+    const timer = setInterval(tick, 1000);
+    tick();
+    requestAnimationFrame(() => (button.dataset.shown = "1"));
+    return button;
   }
 
   async function openProof(member, event) {

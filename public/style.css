@@ -1118,3 +1118,10 @@ button.status:active {
 .share-proof {
   margin-top: 24px;
 }
+
+.button.share-proof:disabled {
+  background: var(--line);
+  color: var(--muted);
+  opacity: 1;
+  font-variant-numeric: tabular-nums;
+}
