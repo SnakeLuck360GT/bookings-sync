@@ -30,11 +30,13 @@ const londonFormat = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
-function londonNow() {
+function toLondon(date) {
   const p = {};
-  for (const { type, value } of londonFormat.formatToParts(new Date())) p[type] = value;
+  for (const { type, value } of londonFormat.formatToParts(date)) p[type] = value;
   return { day: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
 }
+
+const londonNow = () => toLondon(new Date());
 
 function addDays(day, n) {
   const d = new Date(`${day}T00:00:00Z`);
@@ -238,27 +240,28 @@ let fieldCount = 0;
 /* ---------- Proof of a booking ---------- */
 
 /**
- * Draw a booking as a shareable image laid out like the university's
- * confirmation email body, so the group can pass proof around. It shows what
- * the timetable feed says and when it was checked.
+ * Recreate the university's booking confirmation email for a booking that has
+ * just been checked live against its feed. It names the booker as the
+ * recipient, and the footer says it was recreated and when it was checked.
  */
-function proofImage(member, event) {
+function proofImage(member, proof) {
   const W = 1080;
   const X = 64;
   const canvas = document.createElement("canvas");
   canvas.width = W;
-  canvas.height = 1240;
+  canvas.height = 1600;
   const g = canvas.getContext("2d");
   const font = (weight, px) => `${weight} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
   const white = "#ececec";
+  const muted = "#8e8e93";
   const blue = "#5b9be6";
 
   g.fillStyle = "#141414";
   g.fillRect(0, 0, canvas.width, canvas.height);
 
   // Wrap text to the width, returning the y below it.
-  function paragraph(text, y, px, colour) {
-    g.font = font(400, px);
+  function paragraph(text, y, px, colour, weight = 400) {
+    g.font = font(weight, px);
     g.fillStyle = colour;
     let line = "";
     for (const word of text.split(" ")) {
@@ -276,17 +279,18 @@ function proofImage(member, event) {
   // "Label: value", with links drawn blue and underlined like the email.
   function field(label, value, y, { link = false, linkLabel = false } = {}) {
     const px = 50;
+    const words = label.split(" ");
     g.font = font(700, px);
     let x = X;
-    for (const [i, word] of label.split(" ").entries()) {
-      const isLast = i === label.split(" ").length - 1;
-      const text = isLast ? `${word}:` : `${word} `;
-      g.fillStyle = linkLabel && isLast ? blue : white;
+    words.forEach((word, i) => {
+      const last = i === words.length - 1;
+      const text = last ? `${word}:` : `${word} `;
+      g.fillStyle = linkLabel && last ? blue : white;
       g.fillText(text, x, y);
       const w = g.measureText(text).width;
-      if (linkLabel && isLast) g.fillRect(x, y + 8, w, 3);
+      if (linkLabel && last) g.fillRect(x, y + 8, w, 3);
       x += w;
-    }
+    });
     x += 16;
     g.font = font(400, px);
     g.fillStyle = link ? blue : white;
@@ -294,31 +298,58 @@ function proofImage(member, event) {
     if (link) g.fillRect(x, y + 8, Math.min(g.measureText(value).width, W - X - x), 3);
   }
 
-  const year = event.day.slice(0, 4);
-  const room = event.building ? `${event.building}_${event.room}` : event.room || event.location || NO_ROOM;
-  let y = 130;
-  y = paragraph(`The room booking detailed below has been ${event.pending ? "requested" : "confirmed"}.`, y, 50, white);
+  const start = toLondon(new Date(proof.start));
+  const end = toLondon(new Date(proof.end));
+  const year = start.day.slice(0, 4);
+  const room = proof.building ? `${proof.building}_${proof.room}` : proof.room || NO_ROOM;
+
+  let y = paragraph("Room Bookings: Room Booking Confirmation", 110, 44, white, 600);
+  y += 10;
+  g.fillStyle = "#2a2a2a";
+  g.fillRect(0, y, W, 2);
+
+  y += 110;
+  g.beginPath();
+  g.arc(X + 50, y - 16, 50, 0, Math.PI * 2);
+  g.fillStyle = "#4a8fdc";
+  g.fill();
+  g.fillStyle = "#ffffff";
+  g.font = font(500, 46);
+  g.textAlign = "center";
+  g.fillText("N", X + 50, y);
+  g.textAlign = "left";
+  g.fillStyle = white;
+  g.font = font(600, 44);
+  g.fillText("noreply@manchester.ac.uk", X + 130, y - 22);
+  g.fillStyle = muted;
+  g.font = font(400, 40);
+  g.fillText(`To ${member.name}`, X + 130, y + 32);
+
+  y += 190;
+  y = paragraph("The room booking detailed below has been confirmed.", y, 50, white);
   y += 50;
   const step = 82;
-  field("Booking Title", event.title || "Room booking", y);
-  field("Date(s)", `${dayOfMonth(event.day)} ${monthOf(event.day)} ${year}`, (y += step), { link: true });
-  field("Day", LONG_DAY_NAMES[weekday(event.day)], (y += step));
-  field("Booking Starts", hhmm(event.start), (y += step), { link: true, linkLabel: true });
-  field("Booking Ends", hhmm(event.end), (y += step), { link: true, linkLabel: true });
+  field("Booking Title", proof.title || "Room booking", y);
+  field("Date(s)", `${dayOfMonth(start.day)} ${monthOf(start.day)} ${year}`, (y += step), { link: true });
+  field("Day", LONG_DAY_NAMES[weekday(start.day)], (y += step));
+  field("Booking Starts", hhmm(start.minutes), (y += step), { link: true, linkLabel: true });
+  field("Booking Ends", hhmm(end.minutes), (y += step), { link: true, linkLabel: true });
   field("Room", room, (y += step));
-  field("Booked by", member.name, (y += step));
-  if (event.reference) field("Reference", event.reference, (y += step));
 
   const checked = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/London",
     day: "numeric",
     month: "short",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date());
-  y += 130;
-  y = paragraph(`From the University of Manchester timetable feed, checked ${checked}. Shared from Bookings.`, y, 32, "#8a8a85");
+  }).format(new Date(proof.checkedAt));
+  y += 140;
+  y = paragraph(
+    `Ref ${proof.reference} · checked live with the university timetable at ${checked} · recreated by Bookings`,
+    y,
+    30,
+    "#77777c",
+  );
 
   // Trim the canvas to the content.
   const out = document.createElement("canvas");
@@ -326,14 +357,6 @@ function proofImage(member, event) {
   out.height = Math.ceil(y + 40);
   out.getContext("2d").drawImage(canvas, 0, 0);
   return new Promise((resolve) => out.toBlob(resolve, "image/png"));
-}
-
-async function openProof(member, event) {
-  // Open the tab during the tap so it isn't blocked as a pop-up, then load the image into it.
-  const tab = window.open("", "_blank");
-  const url = URL.createObjectURL(await proofImage(member, event));
-  if (tab) tab.location.href = url;
-  else location.href = url;
 }
 
 /* ---------- Shared form parts ---------- */
@@ -816,8 +839,46 @@ function startGroup(id) {
         event.reference && row("Ref", h("span", { class: "tabular" }, event.reference)),
         event.pending && row("Status", "Pending"),
       ),
-      h("button", { class: "button primary share-proof", type: "button", onclick: () => openProof(member, event) }, "Open proof"),
+      proofButton(member, event),
     );
+  }
+
+  /**
+   * Proof is offered for confirmed bookings from the university's feed, once
+   * they've started and can no longer be cancelled.
+   */
+  function proofButton(member, event) {
+    if (!event.verifiable) return null;
+    const now = londonNow();
+    const started = event.day < now.day || (event.day === now.day && event.start <= now.minutes);
+    const ended = event.day < now.day || (event.day === now.day && event.end <= now.minutes);
+    if (ended) return null;
+    if (!started) {
+      return h(
+        "p",
+        { class: "field-note share-proof" },
+        `Proof is available from ${time(event.start)} on ${LONG_DAY_NAMES[weekday(event.day)]}, once the booking has started and can't be cancelled.`,
+      );
+    }
+    return h(
+      "button",
+      { class: "button primary share-proof", type: "button", onclick: () => openProof(member, event) },
+      "Open proof",
+    );
+  }
+
+  async function openProof(member, event) {
+    // Open the tab during the tap so it isn't blocked as a pop-up, then load the image into it.
+    const tab = window.open("", "_blank");
+    try {
+      const proof = await api(`/groups/${id}/members/${member.id}/proof?ref=${encodeURIComponent(event.reference)}`);
+      const url = URL.createObjectURL(await proofImage(member, proof));
+      if (tab) tab.location.href = url;
+      else location.href = url;
+    } catch (err) {
+      tab?.close();
+      toast(err.message);
+    }
   }
 
   /* --- views --- */

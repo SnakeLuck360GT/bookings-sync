@@ -34,3 +34,20 @@ END:VEVENT`,
     .map((e) => e.reference);
   assert.deepEqual(kept, ["RB-live", "RB-pending"]);
 });
+
+test("only the university's timetable host counts as an official feed", async () => {
+  const { isUniversityFeed } = await import("../lib/bookings.js");
+  assert.equal(isUniversityFeed("https://scientia-eu-v4-3-api-d3-02.azurewebsites.net//api/ical/a/b/timetable.ics"), true);
+  assert.equal(isUniversityFeed("https://my.manchester.ac.uk/Timetable/ical/abc.ics"), true);
+  assert.equal(isUniversityFeed("https://example.com/fake.ics"), false);
+  assert.equal(isUniversityFeed("https://scientia-eu.azurewebsites.net.evil.com/x.ics"), false);
+  assert.equal(isUniversityFeed("https://notmanchester.ac.uk/x.ics"), false);
+});
+
+test("only accepted bookings are confirmed", async () => {
+  const { isConfirmed } = await import("../lib/bookings.js");
+  assert.equal(isConfirmed({ kind: "Booking accepted", status: "Accepted" }), true);
+  assert.equal(isConfirmed({ kind: "Booking pending", status: "Pending" }), false);
+  assert.equal(isConfirmed({ kind: "Booking accepted", status: "Cancelled" }), false);
+  assert.equal(isConfirmed({ kind: "Lecture", status: "" }), false);
+});

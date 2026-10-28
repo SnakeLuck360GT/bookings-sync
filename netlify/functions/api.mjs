@@ -1,5 +1,5 @@
 import { loadFeed, normaliseUrl, forgetFeed, UserError } from "../../lib/feeds.js";
-import { isBooking } from "../../lib/bookings.js";
+import { isBooking, isConfirmed, isUniversityFeed } from "../../lib/bookings.js";
 import { occurrencesBetween } from "../../lib/ics.js";
 import { addDays, isMonday, toDayPieces } from "../../lib/london.js";
 import { createGroup, getGroup, updateGroup, normaliseCode, newId, nextColour, MAX_MEMBERS } from "../../lib/store.js";
@@ -50,17 +50,20 @@ async function week(group, monday) {
   const members = await Promise.all(
     group.members.map(async (member) => {
       try {
+        const official = isUniversityFeed(member.url);
         const events = occurrencesBetween(await loadFeed(member.url), from, to)
           .filter(isBooking)
-          .flatMap(({ start, end, title, location, building, room, status, reference }) =>
-            toDayPieces(start, end, monday, sunday).map((piece) => ({
+          .flatMap((event) =>
+            toDayPieces(event.start, event.end, monday, sunday).map((piece) => ({
               ...piece,
-              title,
-              location,
-              building,
-              room,
-              reference,
-              pending: /pending|request|provisional/i.test(status),
+              title: event.title,
+              location: event.location,
+              building: event.building,
+              room: event.room,
+              reference: event.reference,
+              pending: /pending|request|provisional/i.test(event.status),
+              // Proof can be made for confirmed bookings from the university's own feed.
+              verifiable: official && Boolean(event.reference) && isConfirmed(event),
             })),
           )
           .sort((a, b) => a.day.localeCompare(b.day) || a.start - b.start);
@@ -116,6 +119,31 @@ async function route(req, parts) {
       return group;
     });
     return group ? json({ group: publicGroup(group), me: member.id }, 201) : fail("Not found", 404);
+  }
+
+  // Re-check a booking live before proof of it is drawn: it must still be in the
+  // university's feed, confirmed, and already started so it can't be cancelled.
+  if (parts.length === 5 && parts[2] === "members" && parts[4] === "proof" && method === "GET") {
+    const group = await getGroup(id);
+    const member = group?.members.find((m) => m.id === parts[3]);
+    if (!member) return fail("Not found", 404);
+    if (!isUniversityFeed(member.url)) throw new UserError("Proof is only available for bookings from the university's timetable.");
+    const reference = new URL(req.url).searchParams.get("ref") || "";
+    const now = new Date();
+    const events = occurrencesBetween(await loadFeed(member.url, { fresh: true }), new Date(now - 2 * 864e5), new Date(+now + 2 * 864e5));
+    const booking = events.find((e) => reference && e.reference === reference && isConfirmed(e));
+    if (!booking) throw new UserError("That booking isn't in the university's timetable any more, so it may have been cancelled.");
+    if (now < booking.start) throw new UserError("Proof is available once the booking starts, when it can no longer be cancelled.");
+    if (now >= booking.end) throw new UserError("This booking has finished.");
+    return json({
+      title: booking.title,
+      building: booking.building,
+      room: booking.room,
+      reference: booking.reference,
+      start: booking.start.toISOString(),
+      end: booking.end.toISOString(),
+      checkedAt: now.toISOString(),
+    });
   }
 
   if (parts.length === 4 && parts[2] === "members" && method === "DELETE") {
