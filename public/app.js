@@ -920,18 +920,10 @@ function startGroup(id) {
     return button;
   }
 
-  async function openProof(member, event) {
-    // Open the tab during the tap so it isn't blocked as a pop-up, then load the image into it.
-    const tab = window.open("", "_blank");
-    try {
-      const proof = await api(`/groups/${id}/members/${member.id}/proof?ref=${encodeURIComponent(event.reference)}`);
-      const url = URL.createObjectURL(await proofImage(member, proof));
-      if (tab) tab.location.href = url;
-      else location.href = url;
-    } catch (err) {
-      tab?.close();
-      toast(err.message);
-    }
+  function openProof(member, event) {
+    // A real page rather than an in-memory image, so the tab survives Safari reloading it.
+    const url = `/g/${id}/proof/${member.id}/${encodeURIComponent(event.reference)}`;
+    if (!window.open(url, "_blank")) location.href = url;
   }
 
   /* --- views --- */
@@ -1560,9 +1552,45 @@ function startGroup(id) {
   });
 }
 
+/* ---------- Proof page ---------- */
+
+/** Check a booking live and show its proof image; reloading checks again. */
+async function renderProof(code, memberId, reference) {
+  document.title = "Booking proof";
+  document.body.classList.add("proof-page");
+  app.replaceChildren(h("p", { class: "proof-status" }, "Checking the booking…"));
+  try {
+    const [group, proof] = await Promise.all([
+      api(`/groups/${code}`),
+      api(`/groups/${code}/members/${memberId}/proof?ref=${encodeURIComponent(reference)}`),
+    ]);
+    const member = group.members.find((m) => m.id === memberId);
+    if (!member) throw new Error("That person isn't in this group any more.");
+    const src = URL.createObjectURL(await proofImage(member, proof));
+    app.replaceChildren(h("img", { class: "proof-image", src, alt: `Booking confirmation for ${proof.room}` }));
+  } catch (err) {
+    document.body.classList.remove("proof-page");
+    app.replaceChildren(
+      h(
+        "main",
+        { class: "page" },
+        h(
+          "div",
+          { class: "missing" },
+          h("h1", {}, "Can't show proof"),
+          h("p", {}, err.message),
+          h("a", { class: "button", href: `/g/${code}` }, "Back to the group"),
+        ),
+      ),
+    );
+  }
+}
+
 /* ---------- Routing ---------- */
 
+const proofMatch = location.pathname.match(/^\/g\/([A-Za-z0-9]{6})\/proof\/([a-z0-9]+)\/([^/]+)\/?$/);
 const match = location.pathname.match(/^\/g\/([A-Za-z0-9]{6})\/?$/);
-if (!match) renderHome();
+if (proofMatch) renderProof(proofMatch[1].toUpperCase(), proofMatch[2], decodeURIComponent(proofMatch[3]));
+else if (!match) renderHome();
 else if (match[1] !== match[1].toUpperCase()) location.replace(`/g/${match[1].toUpperCase()}`);
 else startGroup(match[1]);

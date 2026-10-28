@@ -1125,3 +1125,22 @@ button.status:active {
   opacity: 1;
   font-variant-numeric: tabular-nums;
 }
+
+/* Proof page */
+
+body.proof-page {
+  background: #141414;
+}
+
+.proof-image {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.proof-status {
+  padding: 40px 16px;
+  text-align: center;
+  color: #8e8e93;
+}
