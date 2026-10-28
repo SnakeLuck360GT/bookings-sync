@@ -328,18 +328,12 @@ function proofImage(member, event) {
   return new Promise((resolve) => out.toBlob(resolve, "image/png"));
 }
 
-async function shareProof(member, event) {
-  const blob = await proofImage(member, event);
-  const name = `booking-${(event.reference || `${event.day}-${event.room}`).replace(/[^A-Za-z0-9-]+/g, "-")}.png`;
-  const file = new File([blob], name, { type: "image/png" });
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: `${event.room} booking` });
-    } catch {}
-    return;
-  }
-  const a = h("a", { href: URL.createObjectURL(blob), download: name });
-  a.click();
+async function openProof(member, event) {
+  // Open the tab during the tap so it isn't blocked as a pop-up, then load the image into it.
+  const tab = window.open("", "_blank");
+  const url = URL.createObjectURL(await proofImage(member, event));
+  if (tab) tab.location.href = url;
+  else location.href = url;
 }
 
 /* ---------- Shared form parts ---------- */
@@ -822,11 +816,7 @@ function startGroup(id) {
         event.reference && row("Ref", h("span", { class: "tabular" }, event.reference)),
         event.pending && row("Status", "Pending"),
       ),
-      h(
-        "button",
-        { class: "button primary share-proof", type: "button", onclick: () => shareProof(member, event) },
-        "Share proof",
-      ),
+      h("button", { class: "button primary share-proof", type: "button", onclick: () => openProof(member, event) }, "Open proof"),
     );
   }
 
