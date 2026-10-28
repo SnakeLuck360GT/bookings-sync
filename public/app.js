@@ -102,6 +102,8 @@ function uncovered(events, from, to, min) {
 
 // A single booking can be at most this long, so longer gaps need several.
 const MAX_BOOKING = 3 * 60;
+// Proof opens this long before a booking starts, when the previous one ends (matches the server).
+const PROOF_EARLY = 10;
 
 /** A gap fits in one booking, or else offer its first or last MAX_BOOKING. */
 function bookingOptions(s, e) {
@@ -866,20 +868,21 @@ function startGroup(id) {
   }
 
   /**
-   * Proof is offered for confirmed bookings from the university's feed, once
-   * they've started and can no longer be cancelled.
+   * Proof is offered for confirmed bookings from the university's feed, from
+   * PROOF_EARLY minutes before they start until they end.
    */
   function proofButton(member, event) {
     if (!event.verifiable) return null;
     const now = londonNow();
-    const started = event.day < now.day || (event.day === now.day && event.start <= now.minutes);
+    const opens = Math.max(event.start - PROOF_EARLY, 0);
+    const started = event.day < now.day || (event.day === now.day && opens <= now.minutes);
     const ended = event.day < now.day || (event.day === now.day && event.end <= now.minutes);
     if (ended) return null;
     if (!started) {
       return h(
         "p",
         { class: "field-note share-proof" },
-        `Proof is available from ${time(event.start)} on ${LONG_DAY_NAMES[weekday(event.day)]}, once the booking has started and can't be cancelled.`,
+        `Proof is available from ${time(opens)} on ${LONG_DAY_NAMES[weekday(event.day)]}, ${PROOF_EARLY} minutes before the booking starts.`,
       );
     }
     return h(

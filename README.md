@@ -14,7 +14,7 @@ For each day:
 - **Booked rooms**: each booking in time order, with who booked it next to the room, the building, times and length, plus a timeline where longer bookings get bigger room numbers.
 - **Booking opens 24 hours ahead**: slots that can't be booked yet show when they open ("Opens tomorrow 13:00"). Tapping one adds a calendar reminder for that moment, optionally repeating weekly (Google Calendar on Android, a calendar file elsewhere). One-off reminders link straight to the booking; weekly ones link to the group.
 
-Tapping a booking shows its details. For confirmed bookings from the university's own timetable feed, once the booking has started (so it can no longer be cancelled), **Open proof** re-checks the booking live against the feed and opens a recreation of the university's confirmation email in a new tab, addressed to the booker, with the reference and the time it was checked.
+Tapping a booking shows its details. For confirmed bookings from the university's own timetable feed, from 10 minutes before the booking starts (when the previous booking ends), **Open proof** re-checks the booking live against the feed and opens a recreation of the university's confirmation email in a new tab, addressed to the booker, with the reference and the time it was checked.
 
 Timetable links stay on the server. The browser only receives names and bookings.
 

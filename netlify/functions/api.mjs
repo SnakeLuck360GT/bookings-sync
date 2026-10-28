@@ -1,5 +1,5 @@
 import { loadFeed, normaliseUrl, forgetFeed, UserError } from "../../lib/feeds.js";
-import { isBooking, isConfirmed, isUniversityFeed } from "../../lib/bookings.js";
+import { isBooking, isConfirmed, isUniversityFeed, PROOF_EARLY_MINUTES } from "../../lib/bookings.js";
 import { occurrencesBetween } from "../../lib/ics.js";
 import { addDays, isMonday, toDayPieces } from "../../lib/london.js";
 import { createGroup, getGroup, updateGroup, normaliseCode, newId, nextColour, MAX_MEMBERS } from "../../lib/store.js";
@@ -122,7 +122,7 @@ async function route(req, parts) {
   }
 
   // Re-check a booking live before proof of it is drawn: it must still be in the
-  // university's feed, confirmed, and already started so it can't be cancelled.
+  // university's feed, confirmed, and due to start within PROOF_EARLY_MINUTES.
   if (parts.length === 5 && parts[2] === "members" && parts[4] === "proof" && method === "GET") {
     const group = await getGroup(id);
     const member = group?.members.find((m) => m.id === parts[3]);
@@ -133,7 +133,9 @@ async function route(req, parts) {
     const events = occurrencesBetween(await loadFeed(member.url, { fresh: true }), new Date(now - 2 * 864e5), new Date(+now + 2 * 864e5));
     const booking = events.find((e) => reference && e.reference === reference && isConfirmed(e));
     if (!booking) throw new UserError("That booking isn't in the university's timetable any more, so it may have been cancelled.");
-    if (now < booking.start) throw new UserError("Proof is available once the booking starts, when it can no longer be cancelled.");
+    if (now < booking.start - PROOF_EARLY_MINUTES * 60 * 1000) {
+      throw new UserError(`Proof is available from ${PROOF_EARLY_MINUTES} minutes before the booking starts.`);
+    }
     if (now >= booking.end) throw new UserError("This booking has finished.");
     return json({
       title: booking.title,
