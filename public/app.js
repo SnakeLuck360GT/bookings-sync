@@ -9,6 +9,7 @@ const DEFAULT_PREFS = { from: BOOKING_OPENS, to: 18 * 60, min: 30 };
 const NO_ROOM = "Room not listed";
 // Where "Book" sends people: Resource Booker's room search for a day and
 // time range. You log in there yourself; this app never does.
+const BOOKINGS_PAGE = "https://resourcebooker.manchester.ac.uk/#/app/booking-requests";
 const BOOKING_URL = "https://resourcebooker.manchester.ac.uk/app/booking-types/a0ad7d46-d2f6-428d-aeba-04a0acc03503";
 
 const hhmm = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
@@ -245,11 +246,13 @@ let fieldCount = 0;
  * recipient, and the footer says it was recreated and when it was checked.
  */
 function proofImage(member, proof) {
-  const W = 1080;
-  const X = 64;
+  // Phone-shaped (iPhone portrait at 3x), laid out like a phone shows the email.
+  const W = 1170;
+  const H = 2532;
+  const X = 60;
   const canvas = document.createElement("canvas");
   canvas.width = W;
-  canvas.height = 1600;
+  canvas.height = H;
   const g = canvas.getContext("2d");
   const font = (weight, px) => `${weight} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
   const white = "#ececec";
@@ -336,6 +339,30 @@ function proofImage(member, proof) {
   field("Booking Ends", hhmm(end.minutes), (y += step), { link: true, linkLabel: true });
   field("Room", room, (y += step));
 
+  // The email links to the booking by an id the feed doesn't carry, so link to the booker's requests instead.
+  y += 130;
+  y = paragraph("If you have valid credentials, you can view your booking", y, 50, white);
+  g.font = font(400, 50);
+  g.fillStyle = white;
+  g.fillText("here: ", X, y);
+  let x = X + g.measureText("here: ").width;
+  let line = "";
+  for (const ch of BOOKINGS_PAGE) {
+    if (x + g.measureText(line + ch).width > W - X) {
+      g.fillStyle = blue;
+      g.fillText(line, x, y);
+      g.fillRect(x, y + 8, g.measureText(line).width, 3);
+      y += 72;
+      x = X;
+      line = "";
+    }
+    line += ch;
+  }
+  g.fillStyle = blue;
+  g.fillText(line, x, y);
+  g.fillRect(x, y + 8, g.measureText(line).width, 3);
+  y += 72;
+
   const checked = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/London",
     day: "numeric",
@@ -351,12 +378,7 @@ function proofImage(member, proof) {
     "#77777c",
   );
 
-  // Trim the canvas to the content.
-  const out = document.createElement("canvas");
-  out.width = W;
-  out.height = Math.ceil(y + 40);
-  out.getContext("2d").drawImage(canvas, 0, 0);
-  return new Promise((resolve) => out.toBlob(resolve, "image/png"));
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
 
 /* ---------- Shared form parts ---------- */
