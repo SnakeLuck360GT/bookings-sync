@@ -238,69 +238,76 @@ let fieldCount = 0;
 /* ---------- Proof of a booking ---------- */
 
 /**
- * Draw a booking as a shareable image, so the group can pass proof around.
- * It shows what the university's feed says and when it was checked.
+ * Draw a booking as a shareable image laid out like the university's
+ * confirmation email body, so the group can pass proof around. It shows what
+ * the timetable feed says and when it was checked.
  */
 function proofImage(member, event) {
   const W = 1080;
-  const H = 1350;
-  const X = 120;
+  const X = 64;
   const canvas = document.createElement("canvas");
   canvas.width = W;
-  canvas.height = H;
+  canvas.height = 1240;
   const g = canvas.getContext("2d");
   const font = (weight, px) => `${weight} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  const white = "#ececec";
+  const blue = "#5b9be6";
 
-  g.fillStyle = "#f7f7f5";
-  g.fillRect(0, 0, W, H);
-  g.beginPath();
-  g.roundRect(56, 56, W - 112, H - 112, 44);
-  g.fillStyle = "#ffffff";
-  g.fill();
-  g.strokeStyle = "#e6e5e1";
-  g.lineWidth = 2;
-  g.stroke();
+  g.fillStyle = "#141414";
+  g.fillRect(0, 0, canvas.width, canvas.height);
 
-  let y = 190;
-  g.fillStyle = event.pending ? "#b06a00" : "#2f7d4f";
-  g.font = font(600, 36);
-  g.fillText(event.pending ? "Room booking · pending" : "Room booking · confirmed", X, y);
-
-  y += 110;
-  g.fillStyle = "#1c1c1a";
-  g.font = font(700, 104);
-  g.fillText(event.room || event.location || NO_ROOM, X, y, W - 2 * X);
-  if (event.building) {
-    y += 70;
-    g.fillStyle = "#6b6b66";
-    g.font = font(400, 46);
-    g.fillText(event.building, X, y);
+  // Wrap text to the width, returning the y below it.
+  function paragraph(text, y, px, colour) {
+    g.font = font(400, px);
+    g.fillStyle = colour;
+    let line = "";
+    for (const word of text.split(" ")) {
+      const next = line ? `${line} ${word}` : word;
+      if (g.measureText(next).width > W - 2 * X && line) {
+        g.fillText(line, X, y);
+        y += px * 1.45;
+        line = word;
+      } else line = next;
+    }
+    g.fillText(line, X, y);
+    return y + px * 1.45;
   }
 
-  y += 60;
-  g.fillStyle = "#e6e5e1";
-  g.fillRect(X, y, W - 2 * X, 2);
+  // "Label: value", with links drawn blue and underlined like the email.
+  function field(label, value, y, { link = false, linkLabel = false } = {}) {
+    const px = 50;
+    g.font = font(700, px);
+    let x = X;
+    for (const [i, word] of label.split(" ").entries()) {
+      const isLast = i === label.split(" ").length - 1;
+      const text = isLast ? `${word}:` : `${word} `;
+      g.fillStyle = linkLabel && isLast ? blue : white;
+      g.fillText(text, x, y);
+      const w = g.measureText(text).width;
+      if (linkLabel && isLast) g.fillRect(x, y + 8, w, 3);
+      x += w;
+    }
+    x += 16;
+    g.font = font(400, px);
+    g.fillStyle = link ? blue : white;
+    g.fillText(value, x, y, W - X - x);
+    if (link) g.fillRect(x, y + 8, Math.min(g.measureText(value).width, W - X - x), 3);
+  }
 
   const year = event.day.slice(0, 4);
-  const rows = [
-    ["Booking title", event.title],
-    ["Date", `${dayOfMonth(event.day)} ${monthOf(event.day)} ${year}`],
-    ["Day", LONG_DAY_NAMES[weekday(event.day)]],
-    ["Starts", time(event.start)],
-    ["Ends", time(event.end)],
-    ["Booked by", member.name],
-    ["Reference", event.reference],
-  ].filter(([, value]) => value);
-  y += 40;
-  for (const [label, value] of rows) {
-    y += 76;
-    g.fillStyle = "#6b6b66";
-    g.font = font(400, 38);
-    g.fillText(label, X, y);
-    g.fillStyle = "#1c1c1a";
-    g.font = font(600, 44);
-    g.fillText(value, X + 330, y, W - 2 * X - 330);
-  }
+  const room = event.building ? `${event.building}_${event.room}` : event.room || event.location || NO_ROOM;
+  let y = 130;
+  y = paragraph(`The room booking detailed below has been ${event.pending ? "requested" : "confirmed"}.`, y, 50, white);
+  y += 50;
+  const step = 82;
+  field("Booking Title", event.title || "Room booking", y);
+  field("Date(s)", `${dayOfMonth(event.day)} ${monthOf(event.day)} ${year}`, (y += step), { link: true });
+  field("Day", LONG_DAY_NAMES[weekday(event.day)], (y += step));
+  field("Booking Starts", hhmm(event.start), (y += step), { link: true, linkLabel: true });
+  field("Booking Ends", hhmm(event.end), (y += step), { link: true, linkLabel: true });
+  field("Room", room, (y += step));
+  field("Booked by", member.name, (y += step));
+  if (event.reference) field("Reference", event.reference, (y += step));
 
   const checked = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/London",
@@ -310,12 +317,15 @@ function proofImage(member, event) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date());
-  g.fillStyle = "#8a8a85";
-  g.font = font(400, 30);
-  g.fillText("From the University of Manchester timetable feed.", X, H - 170);
-  g.fillText(`Checked ${checked}. Shared from Bookings.`, X, H - 126);
+  y += 130;
+  y = paragraph(`From the University of Manchester timetable feed, checked ${checked}. Shared from Bookings.`, y, 32, "#8a8a85");
 
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  // Trim the canvas to the content.
+  const out = document.createElement("canvas");
+  out.width = W;
+  out.height = Math.ceil(y + 40);
+  out.getContext("2d").drawImage(canvas, 0, 0);
+  return new Promise((resolve) => out.toBlob(resolve, "image/png"));
 }
 
 async function shareProof(member, event) {
