@@ -1,8 +1,8 @@
 import { loadFeed, normaliseUrl, forgetFeed, UserError } from "../../lib/feeds.js";
-import { isBooking, isConfirmed, isUniversityFeed, PROOF_EARLY_MINUTES } from "../../lib/bookings.js";
+import { isBooking, isConfirmed, isLocked, isUniversityFeed, PROOF_EARLY_MINUTES } from "../../lib/bookings.js";
 import { occurrencesBetween } from "../../lib/ics.js";
 import { addDays, isMonday, toDayPieces } from "../../lib/london.js";
-import { createGroup, getGroup, updateGroup, normaliseCode, newId, nextColour, MAX_MEMBERS } from "../../lib/store.js";
+import { createGroup, getGroup, updateGroup, normaliseCode, newId, nextColour, MAX_MEMBERS, LOCKED_GROUP } from "../../lib/store.js";
 
 export const config = { path: "/api/*" };
 
@@ -13,6 +13,9 @@ const json = (body, status = 200) =>
   });
 
 const fail = (message, status = 400) => json({ error: message }, status);
+
+/** The LOCKED group only sees "Locked" bookings, and every other group sees everything but those. */
+const visibleTo = (group) => (event) => (group.id === LOCKED_GROUP) === isLocked(event);
 
 // Links stay on the server; friends only ever receive names and room bookings.
 const publicMember = ({ id, name, colour }) => ({ id, name, colour });
@@ -53,6 +56,7 @@ async function week(group, monday) {
         const official = isUniversityFeed(member.url);
         const events = occurrencesBetween(await loadFeed(member.url), from, to)
           .filter(isBooking)
+          .filter(visibleTo(group))
           .flatMap((event) =>
             toDayPieces(event.start, event.end, monday, sunday).map((piece) => ({
               ...piece,
@@ -131,7 +135,7 @@ async function route(req, parts) {
     const reference = new URL(req.url).searchParams.get("ref") || "";
     const now = new Date();
     const events = occurrencesBetween(await loadFeed(member.url, { fresh: true }), new Date(now - 2 * 864e5), new Date(+now + 2 * 864e5));
-    const booking = events.find((e) => reference && e.reference === reference && isConfirmed(e));
+    const booking = events.find((e) => reference && e.reference === reference && isConfirmed(e) && visibleTo(group)(e));
     if (!booking) throw new UserError("That booking isn't in the university's timetable any more, so it may have been cancelled.");
     if (now < booking.start - PROOF_EARLY_MINUTES * 60 * 1000) {
       throw new UserError(`Proof is available from ${PROOF_EARLY_MINUTES} minutes before the booking starts.`);

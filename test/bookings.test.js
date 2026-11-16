@@ -51,3 +51,20 @@ test("only accepted bookings are confirmed", async () => {
   assert.equal(isConfirmed({ kind: "Booking accepted", status: "Cancelled" }), false);
   assert.equal(isConfirmed({ kind: "Lecture", status: "" }), false);
 });
+
+test("bookings called Locked, in any case, are locked", async () => {
+  const { isLocked } = await import("../lib/bookings.js");
+  assert.equal(isLocked({ title: "Locked" }), true);
+  assert.equal(isLocked({ title: "LOCKED" }), true);
+  assert.equal(isLocked({ title: " locked " }), true);
+  assert.equal(isLocked({ title: "Group Project", summary: "lOcKeD" }), true);
+  assert.equal(isLocked({ title: "Group Project" }), false);
+  assert.equal(isLocked({ title: "Locked out" }), false);
+});
+
+test("LOCKED is a valid group code even though codes skip L and O", async () => {
+  const { normaliseCode, LOCKED_GROUP } = await import("../lib/store.js");
+  assert.equal(normaliseCode("locked"), LOCKED_GROUP);
+  assert.equal(normaliseCode("K7M2QX"), "K7M2QX");
+  assert.equal(normaliseCode("LOCKEX"), null);
+});

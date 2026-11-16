@@ -133,6 +133,7 @@ END:VEVENT`);
   const [a, b, ...rest] = occurrencesBetween(parseFeed(ics), from, to).map(({ start, end, ...d }) => d);
   assert.deepEqual(a, {
     title: "Fundamentals of Computer Architecture",
+    summary: "COMP15111/LECTURE2/",
     kind: "Lecture",
     code: "COMP15111",
     location: "Simon TH B",
@@ -141,7 +142,7 @@ END:VEVENT`);
     status: "",
     reference: "",
   });
-  assert.deepEqual(b, { title: "COMP22111/LECTURE/", kind: "", code: "COMP22111", location: "", building: "", room: "", status: "", reference: "" });
+  assert.deepEqual(b, { title: "COMP22111/LECTURE/", summary: "COMP22111/LECTURE/", kind: "", code: "COMP22111", location: "", building: "", room: "", status: "", reference: "" });
   assert.equal(rest.length, 0);
 });
 
